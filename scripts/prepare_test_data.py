@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Validate every ordered JSONL in a download manifest before vectorization."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections import Counter
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from ember_calibration.data_validation import validate_metadata  # noqa: E402
+from ember_calibration.archive_manifest import load_jsonl_inputs, sha256_file  # noqa: E402
+from ember_calibration.preparation import validate_vectorized_label_file  # noqa: E402
+
+EXPECTED_INPUT_COUNTS = {"Win32": 360_000, "Win64": 120_000, "Dot_Net": 60_000}
+
+
+def validate_aggregate_record_counts(
+    observed: Counter[str], expected: dict[str, int] = EXPECTED_INPUT_COUNTS
+) -> None:
+    if dict(observed) != expected:
+        raise ValueError(
+            f"aggregate file-type record counts mismatch: expected {expected}, found {dict(observed)}"
+        )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--download-manifest", type=Path, required=True)
+    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--execute-vectorization", action="store_true")
+    return parser.parse_args()
+
+
+def inspect_jsonl(path: Path) -> tuple[int, list[dict[str, object]]]:
+    rows = []
+    with path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise ValueError(f"invalid JSON in {path}:{line_number}: {error}") from error
+            rows.append(
+                {
+                    "sha256": record.get("sha256"),
+                    "label": record.get("label"),
+                    "file_type": record.get("file_type"),
+                    "family": record.get("family"),
+                }
+            )
+    return len(rows), rows
+
+
+def main() -> None:
+    args = parse_args()
+    manifest = load_jsonl_inputs(args.download_manifest)
+    print("selected input manifest:")
+    all_rows = []
+    provenance = []
+    observed_counts = Counter()
+    for file_type, path in manifest:
+        count, rows = inspect_jsonl(path)
+        checksum = sha256_file(path)
+        print(f"- {file_type}: {path.resolve()} ({count} rows, sha256={checksum})")
+        observed_counts[file_type] += count
+        all_rows.extend(rows)
+        provenance.append({"file_type": file_type, "path": str(path.resolve()), "rows": count, "sha256": checksum})
+    validate_aggregate_record_counts(observed_counts)
+    hashes = [row["sha256"] for row in all_rows]
+    if any(value is None or not str(value).strip() for value in hashes):
+        raise ValueError("manifest contains missing SHA-256 values")
+    duplicates = {key: value for key, value in Counter(hashes).items() if value > 1}
+    if duplicates:
+        multiplicities = Counter(duplicates.values())
+        raise ValueError(f"duplicate hashes detected; multiplicities={dict(sorted(multiplicities.items()))}")
+    metadata = pd.DataFrame(all_rows)
+    report = validate_metadata(metadata)
+    print(report.as_text())
+    if not args.execute_vectorization:
+        print("validation complete; vectorization was not requested")
+        return
+    from thrember import PEFeatureExtractor
+    from thrember.model import vectorize_subset
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    feature_path = args.output_dir / "X_test.dat"
+    label_path = args.output_dir / "y_test.dat"
+    paths = [path for _, path in manifest]
+    vectorize_subset(feature_path, label_path, paths, PEFeatureExtractor(), len(metadata), "label")
+    validate_vectorized_label_file(label_path, metadata["label"].to_numpy(dtype=np.int32))
+    feature_bytes_per_row, remainder = divmod(feature_path.stat().st_size, len(metadata))
+    if remainder or feature_bytes_per_row % np.dtype(np.float32).itemsize:
+        raise RuntimeError("feature file size is not consistent with the metadata row count")
+    feature_count = feature_bytes_per_row // np.dtype(np.float32).itemsize
+    metadata_path = args.output_dir / "test_metadata.parquet"
+    metadata.to_parquet(metadata_path, index=False)
+    preparation_manifest_path = args.output_dir / "preparation_manifest.json"
+    provenance = {
+        "schema_version": 1,
+        "download_manifest": {
+            "path": str(args.download_manifest.resolve()),
+            "sha256": sha256_file(args.download_manifest),
+        },
+        "inputs": provenance,
+        "rows": len(metadata),
+        "feature_count": feature_count,
+        "feature_dtype": "float32",
+        "label_dtype": "int32",
+        "artifacts": {
+            "features": {
+                "path": feature_path.name,
+                "sha256": sha256_file(feature_path),
+                "size_bytes": feature_path.stat().st_size,
+            },
+            "labels": {
+                "path": label_path.name,
+                "sha256": sha256_file(label_path),
+                "size_bytes": label_path.stat().st_size,
+            },
+            "metadata": {
+                "path": metadata_path.name,
+                "sha256": sha256_file(metadata_path),
+                "size_bytes": metadata_path.stat().st_size,
+            },
+        },
+        "alignment_check": "vectorized labels exactly match metadata labels",
+    }
+    preparation_manifest_path.write_text(json.dumps(provenance, indent=2) + "\n")
+    print(f"prepared {len(metadata)} aligned rows with {feature_count} features")
+
+
+if __name__ == "__main__":
+    main()

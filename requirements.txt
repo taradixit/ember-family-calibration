@@ -1,0 +1,9 @@
+numpy
+pandas
+pyarrow
+lightgbm
+huggingface_hub
+scikit-learn
+signify==0.7.1
+thrember @ git+https://github.com/FutureComputing4AI/EMBER2024.git@0ef753e81d98bf209f71b03cd331dfc190b5b54d
+pytest

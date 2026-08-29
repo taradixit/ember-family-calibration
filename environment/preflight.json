@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "performed_at_utc": "2026-08-29T05:49:56Z",
+  "runtime_remediation_at_utc": "2026-08-29T18:47:07Z",
+  "scope": "clean-environment and storage preflight only; no corrected experiment",
+  "platform": {
+    "operating_system": "macOS 14.6.1",
+    "architecture": "arm64",
+    "python": "3.12.0",
+    "virtual_environment": ".venv"
+  },
+  "installation": {
+    "requirements_install_succeeded": true,
+    "pinned_thrember_commit_installed": "0ef753e81d98bf209f71b03cd331dfc190b5b54d",
+    "local_dependency_correction": "signify==0.7.1",
+    "local_dependency_correction_reason": "The pinned thrember source imports signify.authenticode.SignedPEFile; unconstrained signify 0.9.2 no longer exports it.",
+    "pip_check": "No broken requirements found.",
+    "runtime_compatibility_complete": true,
+    "blocker": null,
+    "previous_blocker": "The initial preflight could not import LightGBM because macOS could not locate libomp.dylib; top-level thrember consequently failed at the same import.",
+    "openmp_remediation": {
+      "homebrew_version": "6.0.20",
+      "libomp_version": "22.1.8",
+      "libomp_prefix": "/opt/homebrew/opt/libomp",
+      "action": "libomp was already installed when remediation resumed; it was not reinstalled"
+    }
+  },
+  "versions": {
+    "numpy": "2.5.2",
+    "pandas": "3.0.5",
+    "pyarrow": "25.0.1",
+    "scikit-learn": "1.9.0",
+    "lightgbm": "4.7.0",
+    "huggingface_hub": "1.29.0",
+    "polars": "1.44.1",
+    "thrember": "0.1.0",
+    "pytest": "9.1.1",
+    "signify": "0.7.1",
+    "pip": "26.2.1",
+    "setuptools": "84.0.0",
+    "wheel": "0.48.0"
+  },
+  "verification": {
+    "tests": {
+      "passed": 53,
+      "failed": 0
+    },
+    "lint": "Ruff passed with no findings.",
+    "syntax": "AST syntax check passed for 18 Python files.",
+    "script_help_commands": "All four passed.",
+    "required_imports": {
+      "numpy": true,
+      "pandas": true,
+      "pyarrow": true,
+      "scikit-learn": true,
+      "huggingface_hub": true,
+      "polars": true,
+      "pytest": true,
+      "lightgbm": true,
+      "thrember_top_level": true,
+      "PEFeatureExtractor": true
+    }
+  },
+  "thrember_inspection": {
+    "distribution_version": "0.1.0",
+    "module_version_exposed": false,
+    "installed_source_location": ".venv/lib/python3.12/site-packages/thrember/__init__.py",
+    "feature_dimension": 2568,
+    "feature_dimension_method": "Confirmed by importing PEFeatureExtractor from the installed top-level thrember package after OpenMP remediation.",
+    "vectorize_subset_signature": "(X_path, y_path, raw_feature_paths, extractor, nrows, label_type='label', label_map={})",
+    "signature_method": "Parsed from the installed pinned model.py source without executing vectorization.",
+    "binary_label_write_dtype": "int32",
+    "label_dtype_source_note": "vectorize() opens per-row labels as np.int32. vectorize_subset() initially allocates the same four-byte label file as np.float32 before workers reopen it as np.int32."
+  },
+  "upstream": {
+    "thrember": {
+      "repository": "FutureComputing4AI/EMBER2024",
+      "revision": "0ef753e81d98bf209f71b03cd331dfc190b5b54d",
+      "revision_exists": true,
+      "verified_by": "GitHub commit metadata API and successful pinned VCS installation"
+    },
+    "dataset": {
+      "repository": "joyce8/EMBER2024",
+      "revision": "3d23efef7c0f0b702c5024400cfff4c3744a3832",
+      "revision_exists": true,
+      "verified_by": "Hugging Face repository metadata API"
+    },
+    "benchmark_model": {
+      "repository": "joyce8/EMBER2024-benchmark-models",
+      "revision": "e5b945dd90e1a1a1ec0cc07b3a17b52e9ba2d0c2",
+      "revision_exists": true,
+      "verified_by": "Hugging Face repository metadata API"
+    }
+  },
+  "external_file_metadata": {
+    "Win32_test.zip": {
+      "size_bytes": 2593425203,
+      "lfs_sha256_reported_by_metadata": "c05f6562dee3ace4195087be918eb00181e33bc31464c671fb5ba00c9dd5dfdb"
+    },
+    "Win64_test.zip": {
+      "size_bytes": 1176459716,
+      "lfs_sha256_reported_by_metadata": "52a5a05c1bfa5bb021bb8b44c2e0afcf8983dfa1c6c0a9d76db393e5c682ce10"
+    },
+    "Dot_Net_test.zip": {
+      "size_bytes": 220481493,
+      "lfs_sha256_reported_by_metadata": "b74c4181dbd77565fce16ba47c8ab0f7c7044ae6d880d859ec2c27365dea6299"
+    },
+    "combined_dataset_archives": {
+      "size_bytes": 3990366412,
+      "size_gib": 3.7163183205
+    },
+    "EMBER2024_PE.model": {
+      "size_bytes": 3756042,
+      "historical_sha256": "4252027863492ac138785c8c18576f43dad77d00faddc14e8c0072e8db419f99",
+      "lfs_sha256_reported_by_metadata": "4252027863492ac138785c8c18576f43dad77d00faddc14e8c0072e8db419f99",
+      "metadata_value_equal_to_historical_value": true,
+      "content_downloaded_and_hashed": false,
+      "content_checksum_independently_verified": false
+    }
+  },
+  "storage": {
+    "filesystem_device": "/dev/disk3s5",
+    "mount_point": "/System/Volumes/Data",
+    "available_bytes": 141315076096,
+    "available_gib": 131.6099205017,
+    "safety_threshold_bytes": 53687091200,
+    "safety_threshold_gib": 50,
+    "passes_safety_rule": true,
+    "expected_vectorized_features": {
+      "rows": 540000,
+      "dimensions": 2568,
+      "bytes_per_feature": 4,
+      "size_bytes": 5546880000,
+      "size_gib": 5.1659345627
+    },
+    "expected_int32_labels": {
+      "size_bytes": 2160000,
+      "size_gib": 0.0020116568
+    },
+    "expected_float32_predictions": {
+      "size_bytes": 2160000,
+      "size_gib": 0.0020116568
+    },
+    "expected_float64_predictions": {
+      "size_bytes": 4320000,
+      "size_gib": 0.0040233135
+    },
+    "unknown_space": "Extracted JSONL sizes and temporary vectorization overhead are unknown before extraction."
+  },
+  "network_request_categories": [
+    "PyPI and files.pythonhosted.org package metadata and wheels/source distributions for the clean environment",
+    "GitHub clone of the exact pinned thrember revision",
+    "GitHub commit metadata API for revision existence",
+    "Hugging Face dataset and model repository metadata APIs with blob metadata enabled"
+  ],
+  "prohibited_operations_performed": []
+}

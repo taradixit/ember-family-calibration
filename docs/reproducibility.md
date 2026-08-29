@@ -2,12 +2,12 @@
 
 ## Clean environment
 
-Create a fresh virtual environment, install the reviewed dependency lock, and
+Create a fresh virtual environment, install the reviewed dependencies, and
 record the Python version, operating system, package versions, upstream source
-revisions, and every command. `requirements.txt` names needed packages but is
-not a lock file; exact package-version compatibility remains unresolved until a
-clean-environment check. The `thrember` requirement is a VCS reference pinned
-to the verified official EMBER2024 Git revision
+revisions, and every command. `requirements.txt` names the direct dependencies.
+`environment/requirements-lock.txt` records the verified macOS arm64 environment
+and is not a universal lock file. The `thrember` requirement is a VCS reference
+pinned to the verified official EMBER2024 Git revision
 `0ef753e81d98bf209f71b03cd331dfc190b5b54d`.
 
 ## Storage and expected inputs
@@ -38,42 +38,57 @@ Verified upstream revisions are:
 - Hugging Face benchmark models `joyce8/EMBER2024-benchmark-models`:
   `e5b945dd90e1a1a1ec0cc07b3a17b52e9ba2d0c2`.
 
+Metadata at the pinned revisions reports these expected artifacts:
+
+- `Win32_test.zip`: 2,593,425,203 bytes and SHA-256
+  `c05f6562dee3ace4195087be918eb00181e33bc31464c671fb5ba00c9dd5dfdb`;
+- `Win64_test.zip`: 1,176,459,716 bytes and SHA-256
+  `52a5a05c1bfa5bb021bb8b44c2e0afcf8983dfa1c6c0a9d76db393e5c682ce10`;
+- `Dot_Net_test.zip`: 220,481,493 bytes and SHA-256
+  `b74c4181dbd77565fce16ba47c8ab0f7c7044ae6d880d859ec2c27365dea6299`;
+- `EMBER2024_PE.model`: 3,756,042 bytes and SHA-256
+  `4252027863492ac138785c8c18576f43dad77d00faddc14e8c0072e8db419f99`.
+
 The historical model checksum is
 `4252027863492ac138785c8c18576f43dad77d00faddc14e8c0072e8db419f99`.
-The downloader must check a future pinned download against it. This foundation
-does not claim that the current upstream model matches because no download was
-performed.
+The metadata value is the same, but the model has not been downloaded and
+independently hashed by this project.
 Historical checksums for `test_metadata.parquet` and `pred_probs.npy` are
 `83c87a558ab180d0aaf8a95fb59c4f28f149ebe9568e5f7c40ee83af07c20601`
 and `e6aa9c3f57d168be864ef5c4d644ff7e7442d72ec4693fe4e94770d2ce17bad5`.
 Those two artifacts came from the doubled pipeline and are audit references,
 not acceptable corrected inputs.
 
-Archive and extracted-member checksums, exact extracted JSONL member names,
-compatible Python package versions, and feature dimensions remain unresolved
-until the future pinned download and clean-environment run.
+Exact extracted JSONL member names and extracted sizes remain unknown until a
+future verified download. No external artifact has been downloaded by this
+project.
 
 ## Validation checkpoints
 
-1. Download only the three named archives at the pinned dataset revision.
-2. Reject unsafe ZIP paths, path traversal, links, unexpected non-JSONL members,
+1. Download only the three named archives and model at their pinned revisions.
+2. Treat every downloaded file as untrusted. Require its exact byte size and
+   SHA-256 before opening any archive.
+3. Stop on the first size or checksum mismatch. Do not extract a ZIP or write a
+   success manifest after a failed verification.
+4. Write `external_artifact_manifest.json` with repository-relative paths and
+   expected and observed integrity values. `--download-only` stops here.
+5. Reject unsafe ZIP paths, path traversal, links, unexpected non-JSONL members,
    repeated archive names, and repeated member paths.
-3. Write a machine-readable manifest containing repository and revision,
-   archive name/checksum/type, and every ordered member path/checksum/size/JSONL
-   flag. Reject repeated resolved paths or an empty JSONL list.
-4. Consume every JSONL in manifest order and require aggregate counts of 360,000
+6. Write the extraction manifest with every ordered member path, checksum, size,
+   type, and JSONL flag. Reject repeated resolved paths or an empty JSONL list.
+7. Consume every JSONL in manifest order and require aggregate counts of 360,000
    Win32, 120,000 Win64, 60,000 Dot_Net, and 540,000 total before vectorization.
-5. Report row count, unique hash count, hash multiplicities, exact duplicate
+8. Report row count, unique hash count, hash multiplicities, exact duplicate
    records, binary label counts, and normalized file-type counts.
-6. Stop on missing hashes, any duplicated hash, invalid labels, or count
+9. Stop on missing hashes, any duplicated hash, invalid labels, or count
    mismatch. Never deduplicate automatically.
-7. Preserve manifest order while producing feature, `int32` label, and metadata
+10. Preserve manifest order while producing feature, `int32` label, and metadata
    rows. Read `y_test.dat` as `int32` and require exact label alignment.
-8. Record metadata/features checksums, row count, feature count, and exact
+11. Record metadata/features checksums, row count, feature count, and exact
    feature byte size in the preparation manifest. Inference must consume and
    validate this manifest, compare the LightGBM model feature count, and require
    finite predictions in `[0, 1]` with exactly the prepared row count.
-9. Run aggregate analysis, then malicious-only family analysis with the reviewed
+12. Run aggregate analysis, then malicious-only family analysis with the reviewed
    minimum count. Record excluded families and all analysis parameters.
 
 ## Output provenance

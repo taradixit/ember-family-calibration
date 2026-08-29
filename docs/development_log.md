@@ -35,3 +35,15 @@
   tests.
 - Used no dataset archives, benchmark model, generated arrays, or corrected
   experiment in establishing this baseline.
+
+## 2026-08-29 — external artifact checks
+
+- Added exact expected sizes and SHA-256 values for the three PE test archives
+  and released benchmark model.
+- Added reusable file verification before any ZIP is opened.
+- Added `--download-only` for download and integrity checks without extraction.
+- Added an external artifact manifest with repository-relative paths, expected
+  and observed integrity values, and extraction status.
+- Added synthetic tests for missing files, size and checksum mismatches,
+  download staging, manifest fields, and extraction ordering. No external file
+  was downloaded or opened while developing these checks.

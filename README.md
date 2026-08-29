@@ -61,6 +61,12 @@ Each script has `--help`. Paths are explicit and repository-relative paths are
 recommended.
 
 ```bash
+python scripts/download_data.py --data-dir data/raw --model-dir models
+python scripts/download_data.py \
+  --data-dir data/raw \
+  --model-dir models \
+  --execute \
+  --download-only
 python scripts/download_data.py --data-dir data/raw --model-dir models --execute
 python scripts/prepare_test_data.py \
   --download-manifest data/raw/download_manifest.json \
@@ -77,11 +83,17 @@ python scripts/analyze_results.py \
   --output-dir results/corrected
 ```
 
-The downloader requests the three verified archive names and records every
-safely extracted JSONL member in order. Preparation consumes that manifest and
-derives the feature count; inference consumes the resulting preparation
-manifest rather than a manually supplied feature count. Downloading,
-vectorization, and inference remain explicit opt-in actions.
+The first command is a dry run. It prints the pinned repositories, revisions,
+filenames, sizes, checksums, and repository-relative destinations without making
+network requests. `--download-only` downloads and verifies all four external
+files, writes `external_artifact_manifest.json`, and does not open a ZIP. Full
+download mode verifies all three archives and the model before it opens any
+archive. It then records every safely extracted JSONL member in order.
+
+Preparation consumes the extraction manifest and derives the feature count.
+Inference consumes the preparation manifest rather than a manually supplied
+feature count. Downloading, vectorization, and inference remain explicit opt-in
+actions.
 
 Verified upstream pins:
 

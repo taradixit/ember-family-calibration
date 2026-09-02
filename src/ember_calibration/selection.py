@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
+import tempfile
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -81,6 +83,83 @@ def resolve_repository_path(value: object, repository_root: Path) -> Path:
     if not resolved.is_relative_to(repository_root.resolve()):
         raise SelectionError(f"path escapes repository: {value}")
     return resolved
+
+
+def _operation_prefix(output_dir: Path, operation: str) -> str:
+    return f".{output_dir.name}.{operation}-"
+
+
+def create_staging_directory(output_dir: Path) -> Path:
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    return Path(
+        tempfile.mkdtemp(
+            prefix=_operation_prefix(output_dir, "staging"),
+            dir=output_dir.parent,
+        )
+    )
+
+
+def reserve_backup_path(output_dir: Path) -> Path:
+    backup_path = Path(
+        tempfile.mkdtemp(
+            prefix=_operation_prefix(output_dir, "backup"),
+            dir=output_dir.parent,
+        )
+    )
+    backup_path.rmdir()
+    return backup_path
+
+
+def remove_operation_directory(path: Path, output_dir: Path, operation: str) -> None:
+    if not path.exists():
+        return
+    expected_parent = output_dir.parent.resolve()
+    if path.parent.resolve() != expected_parent or not path.name.startswith(
+        _operation_prefix(output_dir, operation)
+    ):
+        raise SelectionError(f"refusing to remove unexpected {operation} directory: {path}")
+    shutil.rmtree(path)
+
+
+def rename_directory(source: Path, destination: Path) -> None:
+    source.replace(destination)
+
+
+def validate_staged_publication(
+    staging_dir: Path,
+    selected_members: list[dict[str, object]],
+) -> None:
+    if not (staging_dir / "selection_manifest.json").is_file():
+        raise SelectionError("staged selection manifest is missing before publication")
+    for member in selected_members:
+        relative_to_selection = Path(Path(str(member["archive_name"])).stem) / Path(
+            str(member["member_name"])
+        )
+        if not (staging_dir / relative_to_selection).is_file():
+            raise SelectionError(
+                f"staged selected member is missing before publication: {relative_to_selection}"
+            )
+
+
+def publish_staged_selection(staging_dir: Path, output_dir: Path, overwrite: bool) -> None:
+    backup_path: Path | None = None
+    previous_moved = False
+    if output_dir.exists():
+        if not overwrite:
+            raise SelectionError("completed selection already exists; pass --overwrite to replace it")
+        backup_path = reserve_backup_path(output_dir)
+        rename_directory(output_dir, backup_path)
+        previous_moved = True
+    try:
+        rename_directory(staging_dir, output_dir)
+    except Exception:
+        if output_dir.exists() and not staging_dir.exists():
+            rename_directory(output_dir, staging_dir)
+        if previous_moved and backup_path is not None and not output_dir.exists():
+            rename_directory(backup_path, output_dir)
+        raise
+    if backup_path is not None:
+        remove_operation_directory(backup_path, output_dir, "backup")
 
 
 def canonical_token(value: object) -> str:
@@ -498,27 +577,21 @@ def select_records(
         manifest_path, output_dir, repository_root, documented_rows=documented_rows
     )
     manifest_output_path = output_dir / "selection_manifest.json"
-    planned_outputs = [member["selected_output_path"] for member in members]
-    existing_outputs = [path for path in planned_outputs if path.exists()]
-    if not overwrite and (manifest_output_path.exists() or existing_outputs):
+    if not overwrite and output_dir.exists():
         raise SelectionError("completed selection already exists; pass --overwrite to replace it")
     verify_source_members(members)
 
-    temporary_paths = []
+    staging_dir = create_staging_directory(output_dir)
     selected_records = []
     hash_states: dict[str, list[object]] = {}
     selected_counts = Counter()
-    manifest_temporary_path = manifest_output_path.with_name("selection_manifest.json.tmp")
     try:
-        manifest_temporary_path.unlink(missing_ok=True)
         for member in members:
-            output_path = member["selected_output_path"]
-            temporary_path = output_path.with_name(output_path.name + ".tmp")
-            temporary_path.unlink(missing_ok=True)
-            temporary_paths.append(temporary_path)
+            relative_output = member["selected_output_path"].relative_to(output_dir)
+            staged_output_path = staging_dir / relative_output
             output_record = compare_and_write_member(
                 member,
-                temporary_path,
+                staged_output_path,
                 extractor_record["detector_input_fields"],
                 hash_states,
             )
@@ -572,18 +645,15 @@ def select_records(
                 "A separate unique-hash sensitivity analysis is planned after inference."
             ),
         }
-        manifest_temporary_path.parent.mkdir(parents=True, exist_ok=True)
-        manifest_temporary_path.write_text(
+        staged_manifest_path = staging_dir / "selection_manifest.json"
+        staged_manifest_path.write_text(
             json.dumps(manifest_document, indent=2) + "\n", encoding="utf-8"
         )
-        for temporary_path, output_path in zip(temporary_paths, planned_outputs, strict=True):
-            temporary_path.replace(output_path)
-        manifest_temporary_path.replace(manifest_output_path)
+        validate_staged_publication(staging_dir, selected_records)
+        publish_staged_selection(staging_dir, output_dir, overwrite)
         return manifest_output_path
     except Exception:
-        for temporary_path in temporary_paths:
-            temporary_path.unlink(missing_ok=True)
-        manifest_temporary_path.unlink(missing_ok=True)
+        remove_operation_directory(staging_dir, output_dir, "staging")
         raise
 
 

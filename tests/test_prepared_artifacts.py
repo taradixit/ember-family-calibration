@@ -16,16 +16,21 @@ def make_manifest(tmp_path):
     manifest.write_text(
         json.dumps(
             {
+                "path_bases": {
+                    "preparation_manifest_directory": "directory containing this manifest"
+                },
                 "rows": 3,
                 "feature_count": 2,
                 "artifacts": {
                     "metadata": {
                         "path": metadata.name,
+                        "path_base": "preparation_manifest_directory",
                         "sha256": sha256_file(metadata),
                         "size_bytes": metadata.stat().st_size,
                     },
                     "features": {
                         "path": features.name,
+                        "path_base": "preparation_manifest_directory",
                         "sha256": sha256_file(features),
                         "size_bytes": features.stat().st_size,
                     },
@@ -59,3 +64,11 @@ def test_prepared_artifacts_reject_checksum_mismatch(tmp_path):
     with pytest.raises(ValueError, match="metadata checksum"):
         load_prepared_artifacts(manifest)
 
+
+def test_prepared_artifacts_reject_ambiguous_path_base(tmp_path):
+    manifest = make_manifest(tmp_path)
+    document = json.loads(manifest.read_text())
+    document["artifacts"]["features"]["path_base"] = "repository_root"
+    manifest.write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="unsupported path base"):
+        load_prepared_artifacts(manifest)

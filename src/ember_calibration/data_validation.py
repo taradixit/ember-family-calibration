@@ -180,6 +180,28 @@ def validate_inputs(metadata: pd.DataFrame, predictions: Iterable[float]) -> Val
     return report
 
 
+def validate_reviewed_selection_inputs(
+    metadata: pd.DataFrame,
+    predictions: Iterable[float],
+    expected_records: int = EXPECTED_PE_RECORDS,
+    expected_file_types: dict[str, int] = EXPECTED_PE_COUNTS,
+    expected_unique_hashes: int = REVIEWED_UNIQUE_HASH_COUNT,
+    expected_multiplicities: dict[int, int] = REVIEWED_HASH_MULTIPLICITIES,
+    expected_repeated_hash_digest: str = REVIEWED_REPEATED_HASH_LIST_SHA256,
+) -> ValidationReport:
+    """Validate predictions aligned to the reviewed official PE selection."""
+    report = validate_reviewed_selection_metadata(
+        metadata,
+        expected_records=expected_records,
+        expected_file_types=expected_file_types,
+        expected_unique_hashes=expected_unique_hashes,
+        expected_multiplicities=expected_multiplicities,
+        expected_repeated_hash_digest=expected_repeated_hash_digest,
+    )
+    validate_predictions(predictions, expected_length=len(metadata))
+    return report
+
+
 def filter_by_minimum_count(metadata: pd.DataFrame, column: str, minimum_count: int) -> pd.DataFrame:
     if column not in metadata.columns:
         raise ValidationError(f"missing grouping column: {column}")

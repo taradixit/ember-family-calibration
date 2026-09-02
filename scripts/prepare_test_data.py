@@ -16,7 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from ember_calibration.archive_manifest import sha256_file  # noqa: E402
 from ember_calibration.data_validation import validate_reviewed_selection_metadata  # noqa: E402
 from ember_calibration.preparation import validate_vectorized_label_file  # noqa: E402
-from ember_calibration.selection import load_completed_selection_manifest  # noqa: E402
+from ember_calibration.selection import (  # noqa: E402
+    load_completed_selection_manifest,
+    repository_relative_path,
+)
 
 EXPECTED_INPUT_COUNTS = {"Win32": 360_000, "Win64": 120_000, "Dot_Net": 60_000}
 
@@ -58,11 +61,83 @@ def inspect_jsonl(path: Path) -> tuple[int, list[dict[str, object]]]:
     return len(rows), rows
 
 
+def build_preparation_provenance(
+    repository_root: Path,
+    selection_manifest: Path,
+    selection_document: dict[str, object],
+    input_observations: list[dict[str, object]],
+    row_count: int,
+    feature_count: int,
+    feature_path: Path,
+    label_path: Path,
+    metadata_path: Path,
+) -> dict[str, object]:
+    output_dir = feature_path.parent.resolve()
+    repository_relative_path(output_dir, repository_root)
+    for artifact_path in (label_path, metadata_path):
+        if artifact_path.parent.resolve() != output_dir:
+            raise ValueError("preparation artifacts must share one output directory")
+    input_records = []
+    for observation in input_observations:
+        input_path = Path(observation["path"])
+        input_records.append(
+            {
+                "file_type": observation["file_type"],
+                "path": repository_relative_path(input_path, repository_root),
+                "path_base": "repository_root",
+                "rows": observation["rows"],
+                "sha256": observation["sha256"],
+            }
+        )
+    return {
+        "schema_version": 1,
+        "path_bases": {
+            "repository_root": "repository root",
+            "preparation_manifest_directory": "directory containing this manifest",
+        },
+        "selection_manifest": {
+            "path": repository_relative_path(selection_manifest, repository_root),
+            "path_base": "repository_root",
+            "sha256": sha256_file(selection_manifest),
+            "selection_rule_name": selection_document["selection_rule_name"],
+            "repeated_hash_list_sha256": selection_document["repeated_hash_list_sha256"],
+        },
+        "inputs": input_records,
+        "rows": row_count,
+        "feature_count": feature_count,
+        "feature_dtype": "float32",
+        "label_dtype": "int32",
+        "artifacts": {
+            "features": {
+                "path": feature_path.name,
+                "path_base": "preparation_manifest_directory",
+                "sha256": sha256_file(feature_path),
+                "size_bytes": feature_path.stat().st_size,
+            },
+            "labels": {
+                "path": label_path.name,
+                "path_base": "preparation_manifest_directory",
+                "sha256": sha256_file(label_path),
+                "size_bytes": label_path.stat().st_size,
+            },
+            "metadata": {
+                "path": metadata_path.name,
+                "path_base": "preparation_manifest_directory",
+                "sha256": sha256_file(metadata_path),
+                "size_bytes": metadata_path.stat().st_size,
+            },
+        },
+        "alignment_check": "vectorized labels exactly match metadata labels",
+    }
+
+
 def main() -> None:
     args = parse_args()
     from thrember import PEFeatureExtractor
 
     repository_root = Path(__file__).resolve().parents[1]
+    repository_relative_path(args.selection_manifest, repository_root)
+    repository_relative_path(args.output_dir, repository_root)
     selection_document, manifest = load_completed_selection_manifest(
         args.selection_manifest,
         repository_root,
@@ -70,7 +145,7 @@ def main() -> None:
     )
     print("selected input manifest:")
     all_rows = []
-    provenance = []
+    input_observations = []
     observed_counts = Counter()
     for file_type, path in manifest:
         count, rows = inspect_jsonl(path)
@@ -78,7 +153,14 @@ def main() -> None:
         print(f"- {file_type}: {path.resolve()} ({count} rows, sha256={checksum})")
         observed_counts[file_type] += count
         all_rows.extend(rows)
-        provenance.append({"file_type": file_type, "path": str(path.resolve()), "rows": count, "sha256": checksum})
+        input_observations.append(
+            {
+                "file_type": file_type,
+                "path": path,
+                "rows": count,
+                "sha256": checksum,
+            }
+        )
     validate_aggregate_record_counts(observed_counts)
     metadata = pd.DataFrame(all_rows)
     report = validate_reviewed_selection_metadata(metadata)
@@ -101,39 +183,18 @@ def main() -> None:
     metadata_path = args.output_dir / "test_metadata.parquet"
     metadata.to_parquet(metadata_path, index=False)
     preparation_manifest_path = args.output_dir / "preparation_manifest.json"
-    provenance = {
-        "schema_version": 1,
-        "selection_manifest": {
-            "path": str(args.selection_manifest.resolve()),
-            "sha256": sha256_file(args.selection_manifest),
-            "selection_rule_name": selection_document["selection_rule_name"],
-            "repeated_hash_list_sha256": selection_document["repeated_hash_list_sha256"],
-        },
-        "inputs": provenance,
-        "rows": len(metadata),
-        "feature_count": feature_count,
-        "feature_dtype": "float32",
-        "label_dtype": "int32",
-        "artifacts": {
-            "features": {
-                "path": feature_path.name,
-                "sha256": sha256_file(feature_path),
-                "size_bytes": feature_path.stat().st_size,
-            },
-            "labels": {
-                "path": label_path.name,
-                "sha256": sha256_file(label_path),
-                "size_bytes": label_path.stat().st_size,
-            },
-            "metadata": {
-                "path": metadata_path.name,
-                "sha256": sha256_file(metadata_path),
-                "size_bytes": metadata_path.stat().st_size,
-            },
-        },
-        "alignment_check": "vectorized labels exactly match metadata labels",
-    }
-    preparation_manifest_path.write_text(json.dumps(provenance, indent=2) + "\n")
+    provenance_document = build_preparation_provenance(
+        repository_root,
+        args.selection_manifest,
+        selection_document,
+        input_observations,
+        len(metadata),
+        feature_count,
+        feature_path,
+        label_path,
+        metadata_path,
+    )
+    preparation_manifest_path.write_text(json.dumps(provenance_document, indent=2) + "\n")
     print(f"prepared {len(metadata)} aligned rows with {feature_count} features")
 
 

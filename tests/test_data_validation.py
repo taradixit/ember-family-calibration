@@ -9,7 +9,9 @@ from ember_calibration.data_validation import (
     build_report,
     filter_by_minimum_count,
     validate_metadata,
+    validate_inputs,
     validate_predictions,
+    validate_reviewed_selection_inputs,
     validate_reviewed_selection_metadata,
 )
 
@@ -38,6 +40,12 @@ def test_duplicate_hash_fails_without_deduplicating():
     with pytest.raises(ValidationError, match="duplicate SHA-256"):
         validate_metadata(frame, expected_records=2, expected_file_types={"Win32": 2})
     assert len(frame) == 2
+
+
+def test_generic_input_validation_remains_strict_about_duplicate_hashes():
+    frame = metadata([["a", 1, "Win32", "x"], ["a", 1, "Win32", "x"]])
+    with pytest.raises(ValidationError, match="duplicate SHA-256"):
+        validate_inputs(frame, [0.9, 0.8])
 
 
 def test_completely_doubled_dataset_fails_loudly():
@@ -109,3 +117,76 @@ def test_reviewed_selection_validation_rejects_repeat_conflict():
             expected_multiplicities={2: 1},
             expected_repeated_hash_digest=repeated_digest,
         )
+
+
+def reviewed_input_frame():
+    return pd.DataFrame(
+        [
+            ["repeat", 1, "Win32", "family-a", 1],
+            ["repeat", 1, "Win32", "family-a", 2],
+            ["unique", 0, "Win64", None, 3],
+        ],
+        columns=["sha256", "label", "file_type", "family", "week_id"],
+    )
+
+
+def validate_small_reviewed_inputs(frame, predictions):
+    return validate_reviewed_selection_inputs(
+        frame,
+        predictions,
+        expected_records=3,
+        expected_file_types={"Win32": 2, "Win64": 1},
+        expected_unique_hashes=2,
+        expected_multiplicities={1: 1, 2: 1},
+        expected_repeated_hash_digest=hashlib.sha256(b"repeat").hexdigest(),
+    )
+
+
+def test_reviewed_selection_inputs_accept_exact_reviewed_repeat_profile():
+    report = validate_small_reviewed_inputs(reviewed_input_frame(), [0.9, 0.8, 0.1])
+    assert report.duplicate_multiplicities == {1: 1, 2: 1}
+
+
+def test_reviewed_selection_inputs_reject_unexpected_repeated_hash():
+    frame = reviewed_input_frame()
+    frame.loc[len(frame)] = ["unique", 0, "Win64", None, 4]
+    with pytest.raises(ValidationError, match="reviewed selection validation failed"):
+        validate_reviewed_selection_inputs(
+            frame,
+            [0.9, 0.8, 0.1, 0.2],
+            expected_records=4,
+            expected_file_types={"Win32": 2, "Win64": 2},
+            expected_unique_hashes=2,
+            expected_multiplicities={2: 2},
+            expected_repeated_hash_digest=hashlib.sha256(b"repeat").hexdigest(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        ("label", 0, "label conflicts"),
+        ("family", "other-family", "family conflicts"),
+        ("file_type", "Win64", "file_type conflicts"),
+        ("week_id", 1, "cross week boundaries"),
+    ],
+)
+def test_reviewed_selection_inputs_reject_repeat_metadata_problems(column, value, message):
+    frame = reviewed_input_frame()
+    frame.loc[1, column] = value
+    with pytest.raises(ValidationError, match=message):
+        validate_small_reviewed_inputs(frame, [0.9, 0.8, 0.1])
+
+
+@pytest.mark.parametrize(
+    ("predictions", "message"),
+    [
+        ([0.1, 0.2], "length mismatch"),
+        ([[0.1], [0.2], [0.3]], "one-dimensional"),
+        ([0.1, 0.2, 1.1], "between 0 and 1"),
+        ([0.1, np.nan, 0.3], "non-finite"),
+    ],
+)
+def test_reviewed_selection_inputs_still_run_prediction_checks(predictions, message):
+    with pytest.raises(ValidationError, match=message):
+        validate_small_reviewed_inputs(reviewed_input_frame(), predictions)

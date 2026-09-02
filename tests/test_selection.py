@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import ember_calibration.selection as selection_module
 from ember_calibration.selection import (
     DETECTOR_INPUT_FIELDS,
     EXPECTED_THREMBER_VERSION,
@@ -317,6 +318,7 @@ def test_failed_write_removes_all_temporary_and_selected_outputs(tmp_path):
     assert not list(output_dir.rglob("*.tmp"))
     assert not list(output_dir.rglob("*.jsonl"))
     assert not (output_dir / "selection_manifest.json").exists()
+    assert not list(output_dir.parent.glob(".selected.staging-*"))
 
 
 def test_existing_completed_selection_requires_explicit_overwrite(tmp_path):
@@ -504,3 +506,84 @@ def test_preparation_loader_refuses_original_download_manifest(tmp_path):
             expected_repeat_profile=synthetic_repeat_profile(),
             documented_rows=SYNTHETIC_DOCUMENTED_ROWS,
         )
+
+
+def test_failure_immediately_before_publication_leaves_no_final_selection(
+    tmp_path, monkeypatch
+):
+    def fail_before_publication(staging_dir, selected_members):
+        raise SelectionError("failure immediately before publication")
+
+    monkeypatch.setattr(
+        selection_module,
+        "validate_staged_publication",
+        fail_before_publication,
+    )
+    with pytest.raises(SelectionError, match="immediately before publication"):
+        run_selection(tmp_path)
+    output_dir = tmp_path / "data/selected"
+    assert not output_dir.exists()
+    assert not list(output_dir.parent.glob(".selected.staging-*"))
+    assert not list(output_dir.parent.glob(".selected.backup-*"))
+
+
+def test_simulated_first_publication_failure_leaves_no_final_selection(
+    tmp_path, monkeypatch
+):
+    original_rename = selection_module.rename_directory
+
+    def fail_staging_publish(source, destination):
+        if source.name.startswith(".selected.staging-") and destination.name == "selected":
+            raise OSError("simulated publication failure")
+        original_rename(source, destination)
+
+    monkeypatch.setattr(selection_module, "rename_directory", fail_staging_publish)
+    with pytest.raises(OSError, match="simulated publication failure"):
+        run_selection(tmp_path)
+    output_dir = tmp_path / "data/selected"
+    assert not output_dir.exists()
+    assert not list(output_dir.parent.glob(".selected.staging-*"))
+    assert not list(output_dir.parent.glob(".selected.backup-*"))
+
+
+def test_overwrite_publication_failure_restores_previous_complete_selection(
+    tmp_path, monkeypatch
+):
+    _, _, output_dir, _ = run_selection(tmp_path)
+    previous_files = {
+        path.relative_to(output_dir): path.read_bytes()
+        for path in output_dir.rglob("*")
+        if path.is_file()
+    }
+    original_rename = selection_module.rename_directory
+
+    def fail_replacement_publish(source, destination):
+        if source.name.startswith(".selected.staging-") and destination == output_dir:
+            raise OSError("simulated replacement publication failure")
+        original_rename(source, destination)
+
+    monkeypatch.setattr(selection_module, "rename_directory", fail_replacement_publish)
+    with pytest.raises(OSError, match="replacement publication failure"):
+        run_selection(tmp_path, overwrite=True)
+    restored_files = {
+        path.relative_to(output_dir): path.read_bytes()
+        for path in output_dir.rglob("*")
+        if path.is_file()
+    }
+    assert restored_files == previous_files
+    assert not list(output_dir.parent.glob(".selected.staging-*"))
+    assert not list(output_dir.parent.glob(".selected.backup-*"))
+
+
+def test_successful_directory_publication_is_complete_and_leaves_no_work_dirs(tmp_path):
+    selection_manifest, _, output_dir, _ = run_selection(tmp_path)
+    document = json.loads(selection_manifest.read_text())
+    expected_outputs = {
+        tmp_path / member["selected_output_path"]
+        for member in document["selected_member_order"]
+    }
+    assert selection_manifest == output_dir / "selection_manifest.json"
+    assert all(path.is_file() for path in expected_outputs)
+    assert len(expected_outputs) == len(document["selected_member_order"])
+    assert not list(output_dir.parent.glob(".selected.staging-*"))
+    assert not list(output_dir.parent.glob(".selected.backup-*"))

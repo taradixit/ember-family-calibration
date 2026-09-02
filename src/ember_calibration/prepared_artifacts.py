@@ -36,6 +36,8 @@ def load_prepared_artifacts(manifest_path: Path) -> dict[str, object]:
         record = artifacts.get(name)
         if not isinstance(record, dict):
             raise ValueError(f"missing {name} artifact record")
+        if record.get("path_base") != "preparation_manifest_directory":
+            raise ValueError(f"{name} artifact has an unsupported path base")
         path = _resolve_recorded_path(manifest_path, record.get("path"))
         if not path.is_file():
             raise FileNotFoundError(path)
@@ -56,4 +58,3 @@ def load_prepared_artifacts(manifest_path: Path) -> dict[str, object]:
         "metadata": resolved["metadata"],
         "features": resolved["features"],
     }
-

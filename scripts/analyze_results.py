@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate corrected inputs and write aggregate and family summaries."""
+"""Validate reviewed inputs and write aggregate and family summaries."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from ember_calibration.data_validation import validate_inputs  # noqa: E402
+from ember_calibration.data_validation import validate_reviewed_selection_inputs  # noqa: E402
 from ember_calibration.family_analysis import family_metrics  # noqa: E402
 from ember_calibration.metrics import (  # noqa: E402
     CALIBRATION_THRESHOLD,
@@ -40,7 +40,7 @@ def main() -> None:
     args = parse_args()
     metadata = pd.read_parquet(args.metadata)
     predictions = np.load(args.predictions, allow_pickle=False)
-    report = validate_inputs(metadata, predictions)
+    report = validate_reviewed_selection_inputs(metadata, predictions)
     print(report.as_text())
     labels = metadata["label"].to_numpy()
     summary = {

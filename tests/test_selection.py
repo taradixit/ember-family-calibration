@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import ember_calibration.selection as selection_module
+import scripts.select_test_records as selector_cli
 from ember_calibration.selection import (
     DETECTOR_INPUT_FIELDS,
     EXPECTED_THREMBER_VERSION,
@@ -587,3 +588,62 @@ def test_successful_directory_publication_is_complete_and_leaves_no_work_dirs(tm
     assert len(expected_outputs) == len(document["selected_member_order"])
     assert not list(output_dir.parent.glob(".selected.staging-*"))
     assert not list(output_dir.parent.glob(".selected.backup-*"))
+
+
+def test_cli_success_message_accepts_relative_arguments_and_returned_path(monkeypatch, capsys):
+    def return_relative_manifest(*args, **kwargs):
+        return Path("data/selected/selection_manifest.json")
+
+    monkeypatch.setattr(selector_cli, "select_records", return_relative_manifest)
+    selector_cli.main(
+        [
+            "--download-manifest",
+            "data/raw/download_manifest.json",
+            "--output-dir",
+            "data/selected",
+            "--execute",
+        ]
+    )
+    assert capsys.readouterr().out == (
+        "completed selection manifest: data/selected/selection_manifest.json\n"
+    )
+
+
+def test_cli_success_message_accepts_absolute_path_inside_repository(monkeypatch, capsys):
+    repository_root = Path(selector_cli.__file__).resolve().parents[1]
+
+    def return_absolute_manifest(*args, **kwargs):
+        return repository_root / "data/selected/selection_manifest.json"
+
+    monkeypatch.setattr(selector_cli, "select_records", return_absolute_manifest)
+    selector_cli.main(
+        [
+            "--download-manifest",
+            "data/raw/download_manifest.json",
+            "--output-dir",
+            "data/selected",
+            "--execute",
+        ]
+    )
+    assert capsys.readouterr().out == (
+        "completed selection manifest: data/selected/selection_manifest.json\n"
+    )
+
+
+def test_cli_success_message_rejects_returned_path_outside_repository(
+    tmp_path, monkeypatch
+):
+    def return_outside_manifest(*args, **kwargs):
+        return tmp_path / "selection_manifest.json"
+
+    monkeypatch.setattr(selector_cli, "select_records", return_outside_manifest)
+    with pytest.raises(SelectionError, match="inside the repository"):
+        selector_cli.main(
+            [
+                "--download-manifest",
+                "data/raw/download_manifest.json",
+                "--output-dir",
+                "data/selected",
+                "--execute",
+            ]
+        )

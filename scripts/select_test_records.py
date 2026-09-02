@@ -10,7 +10,11 @@ from importlib.metadata import version
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from ember_calibration.selection import plan_selection, select_records  # noqa: E402
+from ember_calibration.selection import (  # noqa: E402
+    plan_selection,
+    repository_relative_path,
+    select_records,
+)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -27,6 +31,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if args.overwrite and not args.execute:
         parser.error("--overwrite requires --execute")
     return args
+
+
+def display_manifest_path(manifest: Path, repository_root: Path) -> str:
+    resolved_manifest = manifest if manifest.is_absolute() else repository_root / manifest
+    return repository_relative_path(resolved_manifest, repository_root)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -52,7 +61,7 @@ def main(argv: list[str] | None = None) -> None:
         version("thrember"),
         overwrite=args.overwrite,
     )
-    print(f"completed selection manifest: {manifest.relative_to(repository_root).as_posix()}")
+    print(f"completed selection manifest: {display_manifest_path(manifest, repository_root)}")
 
 
 if __name__ == "__main__":

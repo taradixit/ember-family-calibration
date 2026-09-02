@@ -13,12 +13,22 @@ the released EMBER2024 PE LightGBM detector: accuracy 0.980322, ROC AUC
 historical reproduced values, not corrected final results. Project lineage and
 current scope are documented in `docs/project_context.md`.
 
-An audit found 1,080,000 metadata rows but only 539,940 unique SHA-256 hashes.
-Nearly every record appeared twice and 60 hashes appeared four times, while the
-documented PE test split has 540,000 records (360,000 Win32, 120,000 Win64, and
-60,000 .NET). The audit also found that the historical SHAP analysis used
-EMBER2018 malicious samples and a separately trained Random Forest, so it did
-not explain the released EMBER2024 LightGBM detector.
+Data validation found why the released archives contain 1,080,000 rows. Each of
+the 36 weekly JSONL members contains two ordered halves. Corresponding rows have
+the same SHA-256, label, family, file type, week ID, and all 12 inputs used by
+the PE detector. Only `caps`, `mbc`, and `ttps` differ. Those fields are not PE
+detector inputs.
+
+The reviewed selection takes the first documented half of each weekly member.
+This is a deterministic structural choice, not a claim that the first half is
+higher quality. It produces the documented 540,000 rows: 360,000 Win32, 120,000
+Win64, and 60,000 Dot_Net. The selection keeps 60 hashes that repeat across
+weeks without label, family, file-type, or detector-input conflicts. A separate
+unique-hash sensitivity analysis will be reported after inference.
+
+The audit also found that the historical SHAP analysis used EMBER2018 malicious
+samples and a separately trained Random Forest, so it did not explain the
+released EMBER2024 LightGBM detector.
 
 The corrected 540,000-record experiment has **not** been rerun. This repository
 currently provides only the validation, metrics, script interfaces, tests, and
@@ -37,9 +47,9 @@ detector, include large artifacts, or make corrected empirical claims.
 
 The dependency set was verified in a clean macOS arm64 Python 3.12 environment.
 LightGBM 4.7.0 and top-level `thrember` 0.1.0 import successfully with the
-Homebrew OpenMP runtime, `PEFeatureExtractor().dim == 2568`, `pip check` passes,
-and all 53 synthetic tests pass. `environment/requirements-lock.txt` captures
-that host-specific environment; it is not a universal cross-platform lock file.
+Homebrew OpenMP runtime, `PEFeatureExtractor().dim == 2568`, and `pip check`
+passes. `environment/requirements-lock.txt` captures that host-specific
+environment; it is not a universal cross-platform lock file.
 
 The official EMBER2024/`thrember` source remains pinned to its verified Git
 commit in `requirements.txt`.
@@ -51,11 +61,10 @@ python -m pip install -r requirements.txt
 PYTHONPATH=src python -m pytest
 ```
 
-No corrected empirical experiment has run. The verified environment establishes
-runtime readiness only; it does not validate undownloaded dataset or model
-contents and does not produce corrected results.
+No corrected empirical experiment has run. Environment and artifact checks do
+not produce corrected results.
 
-## Intended workflow (not run in this revision)
+## Controlled workflow
 
 Each script has `--help`. Paths are explicit and repository-relative paths are
 recommended.
@@ -68,8 +77,15 @@ python scripts/download_data.py \
   --execute \
   --download-only
 python scripts/download_data.py --data-dir data/raw --model-dir models --execute
-python scripts/prepare_test_data.py \
+python scripts/select_test_records.py \
   --download-manifest data/raw/download_manifest.json \
+  --output-dir data/selected
+python scripts/select_test_records.py \
+  --download-manifest data/raw/download_manifest.json \
+  --output-dir data/selected \
+  --execute
+python scripts/prepare_test_data.py \
+  --selection-manifest data/selected/selection_manifest.json \
   --output-dir data/processed \
   --execute-vectorization
 python scripts/run_inference.py \
@@ -90,10 +106,13 @@ files, writes `external_artifact_manifest.json`, and does not open a ZIP. Full
 download mode verifies all three archives and the model before it opens any
 archive. It then records every safely extracted JSONL member in order.
 
-Preparation consumes the extraction manifest and derives the feature count.
-Inference consumes the preparation manifest rather than a manually supplied
-feature count. Downloading, vectorization, and inference remain explicit opt-in
-actions.
+The selector is also a dry run unless `--execute` is present. On execution it
+rechecks every source file and paired row before writing the documented first
+half through temporary files. Preparation accepts only a complete selection
+manifest, rechecks the selected files and residual-repeat profile, and derives
+the feature count. Inference consumes the preparation manifest rather than a
+manually supplied feature count. Downloading, selection, vectorization, and
+inference remain explicit opt-in actions.
 
 Verified upstream pins:
 
@@ -106,11 +125,12 @@ Verified upstream pins:
 
 ## Validation policy
 
-The pipeline never silently deduplicates. It prints a validation report with
-row count, unique hash count, hash multiplicities, exact duplicate count, label
-counts, and normalized file-type counts. Duplicate hashes, unexpected counts,
-invalid labels or predictions, and metadata/prediction misalignment stop the
-pipeline and require an explicit investigation and user decision.
+The pipeline never silently deduplicates. Generic input validation still rejects
+duplicate hashes. The narrow official-selection path accepts only the reviewed
+profile of 539,940 unique hashes, including 60 hashes that each occur twice
+across weeks. Any different multiplicity, repeated-hash-list digest, metadata
+conflict, detector-input conflict, count, checksum, label, or alignment stops
+the pipeline.
 
 Calibration uses the standard binary predicted label at `p >= 0.5`, confidence
 `max(p, 1-p)`, and equal-width bins spanning `[0.5, 1.0]`. Bins use

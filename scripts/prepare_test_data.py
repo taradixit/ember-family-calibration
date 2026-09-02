@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate every ordered JSONL in a download manifest before vectorization."""
+"""Validate a completed reviewed selection before vectorization."""
 
 from __future__ import annotations
 
@@ -13,9 +13,10 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from ember_calibration.data_validation import validate_metadata  # noqa: E402
-from ember_calibration.archive_manifest import load_jsonl_inputs, sha256_file  # noqa: E402
+from ember_calibration.archive_manifest import sha256_file  # noqa: E402
+from ember_calibration.data_validation import validate_reviewed_selection_metadata  # noqa: E402
 from ember_calibration.preparation import validate_vectorized_label_file  # noqa: E402
+from ember_calibration.selection import load_completed_selection_manifest  # noqa: E402
 
 EXPECTED_INPUT_COUNTS = {"Win32": 360_000, "Win64": 120_000, "Dot_Net": 60_000}
 
@@ -29,12 +30,12 @@ def validate_aggregate_record_counts(
         )
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--download-manifest", type=Path, required=True)
+    parser.add_argument("--selection-manifest", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--execute-vectorization", action="store_true")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def inspect_jsonl(path: Path) -> tuple[int, list[dict[str, object]]]:
@@ -51,6 +52,7 @@ def inspect_jsonl(path: Path) -> tuple[int, list[dict[str, object]]]:
                     "label": record.get("label"),
                     "file_type": record.get("file_type"),
                     "family": record.get("family"),
+                    "week_id": record.get("week_id"),
                 }
             )
     return len(rows), rows
@@ -58,7 +60,14 @@ def inspect_jsonl(path: Path) -> tuple[int, list[dict[str, object]]]:
 
 def main() -> None:
     args = parse_args()
-    manifest = load_jsonl_inputs(args.download_manifest)
+    from thrember import PEFeatureExtractor
+
+    repository_root = Path(__file__).resolve().parents[1]
+    selection_document, manifest = load_completed_selection_manifest(
+        args.selection_manifest,
+        repository_root,
+        PEFeatureExtractor(),
+    )
     print("selected input manifest:")
     all_rows = []
     provenance = []
@@ -71,20 +80,12 @@ def main() -> None:
         all_rows.extend(rows)
         provenance.append({"file_type": file_type, "path": str(path.resolve()), "rows": count, "sha256": checksum})
     validate_aggregate_record_counts(observed_counts)
-    hashes = [row["sha256"] for row in all_rows]
-    if any(value is None or not str(value).strip() for value in hashes):
-        raise ValueError("manifest contains missing SHA-256 values")
-    duplicates = {key: value for key, value in Counter(hashes).items() if value > 1}
-    if duplicates:
-        multiplicities = Counter(duplicates.values())
-        raise ValueError(f"duplicate hashes detected; multiplicities={dict(sorted(multiplicities.items()))}")
     metadata = pd.DataFrame(all_rows)
-    report = validate_metadata(metadata)
+    report = validate_reviewed_selection_metadata(metadata)
     print(report.as_text())
     if not args.execute_vectorization:
         print("validation complete; vectorization was not requested")
         return
-    from thrember import PEFeatureExtractor
     from thrember.model import vectorize_subset
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -102,9 +103,11 @@ def main() -> None:
     preparation_manifest_path = args.output_dir / "preparation_manifest.json"
     provenance = {
         "schema_version": 1,
-        "download_manifest": {
-            "path": str(args.download_manifest.resolve()),
-            "sha256": sha256_file(args.download_manifest),
+        "selection_manifest": {
+            "path": str(args.selection_manifest.resolve()),
+            "sha256": sha256_file(args.selection_manifest),
+            "selection_rule_name": selection_document["selection_rule_name"],
+            "repeated_hash_list_sha256": selection_document["repeated_hash_list_sha256"],
         },
         "inputs": provenance,
         "rows": len(metadata),

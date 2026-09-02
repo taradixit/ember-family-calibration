@@ -20,14 +20,15 @@ the full run and document the chosen capacity.
 
 Expected external inputs are:
 
-- `Win32_test.zip`, assigned to Win32, with 360,000 aggregate JSONL records;
-- `Win64_test.zip`, assigned to Win64, with 120,000 aggregate JSONL records;
-- `Dot_Net_test.zip`, assigned to Dot_Net, with 60,000 aggregate JSONL records;
+- `Win32_test.zip`, assigned to Win32;
+- `Win64_test.zip`, assigned to Win64;
+- `Dot_Net_test.zip`, assigned to Dot_Net;
 - the released `EMBER2024_PE.model` from
   `joyce8/EMBER2024-benchmark-models`.
 
-Each ZIP may contain multiple JSONL members. No stage assumes one JSONL per
-file type.
+Each ZIP contains 12 weekly JSONL members. The released members contain
+1,080,000 rows because every member has two ordered halves. The documented
+selection contains 360,000 Win32, 120,000 Win64, and 60,000 Dot_Net rows.
 
 Verified upstream revisions are:
 
@@ -51,17 +52,38 @@ Metadata at the pinned revisions reports these expected artifacts:
 
 The historical model checksum is
 `4252027863492ac138785c8c18576f43dad77d00faddc14e8c0072e8db419f99`.
-The metadata value is the same, but the model has not been downloaded and
-independently hashed by this project.
+The metadata value is the same as the digest confirmed during the controlled
+local download check. Large artifacts remain ignored and are not part of the
+repository.
 Historical checksums for `test_metadata.parquet` and `pred_probs.npy` are
 `83c87a558ab180d0aaf8a95fb59c4f28f149ebe9568e5f7c40ee83af07c20601`
 and `e6aa9c3f57d168be864ef5c4d644ff7e7442d72ec4693fe4e94770d2ce17bad5`.
 Those two artifacts came from the doubled pipeline and are audit references,
 not acceptable corrected inputs.
 
-Exact extracted JSONL member names and extracted sizes remain unknown until a
-future verified download. No external artifact has been downloaded by this
-project.
+The controlled extraction produced 36 verified JSONL members totaling
+17,655,416,292 bytes. The extraction manifest records every member name, size,
+and SHA-256 value. These large files remain outside version control.
+
+## Reviewed record selection
+
+Each weekly member contains exactly twice its documented count. The selection
+compares corresponding rows and keeps the first documented half: 30,000 Win32,
+10,000 Win64, or 5,000 Dot_Net rows per member. The first half is a deterministic
+structural choice. It is not treated as higher quality than the second half.
+
+All 540,000 paired positions match on SHA-256, label, family, file type, week
+ID, and the 12 PE detector inputs. Only `caps`, `mbc`, and `ttps` differ. The
+pinned `thrember 0.1.0` extractor confirms that those three fields are not used
+to create its 2,568-feature PE vector.
+
+The selected data has 539,940 unique hashes. Of these, 539,880 occur once and
+60 occur twice across member and week boundaries. The repeats have no label,
+family, file-type, or detector-input conflicts. The SHA-256 of the sorted
+repeated-hash list is
+`81c20f8d9397f4f27143652988dfdc036edc3a3c948a0efe75e7817e97283767`.
+The primary analysis keeps these rows. A separate unique-hash sensitivity
+analysis will be reported after inference.
 
 ## Validation checkpoints
 
@@ -76,19 +98,23 @@ project.
    repeated archive names, and repeated member paths.
 6. Write the extraction manifest with every ordered member path, checksum, size,
    type, and JSONL flag. Reject repeated resolved paths or an empty JSONL list.
-7. Consume every JSONL in manifest order and require aggregate counts of 360,000
-   Win32, 120,000 Win64, 60,000 Dot_Net, and 540,000 total before vectorization.
-8. Report row count, unique hash count, hash multiplicities, exact duplicate
-   records, binary label counts, and normalized file-type counts.
-9. Stop on missing hashes, any duplicated hash, invalid labels, or count
-   mismatch. Never deduplicate automatically.
-10. Preserve manifest order while producing feature, `int32` label, and metadata
-   rows. Read `y_test.dat` as `int32` and require exact label alignment.
-11. Record metadata/features checksums, row count, feature count, and exact
+7. Read every source member in manifest order. Require twice its documented
+   count and compare the two halves with separate streaming handles.
+8. Require paired SHA-256, label, family, file type, week ID, and all 12 detector
+   inputs to match. Reject any difference outside `caps`, `mbc`, and `ttps`.
+9. Write the first documented half through temporary files. Rename only after
+   all members, total counts, and the reviewed residual-repeat profile pass.
+10. Before preparation, require a complete selection manifest. Recheck every
+    selected file's size and SHA-256 and recompute its repeat profile. Generic
+    validation continues to reject duplicate hashes.
+11. Preserve selection-manifest order while producing feature, `int32` label,
+    and metadata rows, including `week_id`. Read `y_test.dat` as `int32` and
+    require exact label alignment.
+12. Record metadata/features checksums, row count, feature count, and exact
    feature byte size in the preparation manifest. Inference must consume and
    validate this manifest, compare the LightGBM model feature count, and require
    finite predictions in `[0, 1]` with exactly the prepared row count.
-12. Run aggregate analysis, then malicious-only family analysis with the reviewed
+13. Run aggregate analysis, then malicious-only family analysis with the reviewed
    minimum count. Record excluded families and all analysis parameters.
 
 ## Output provenance
@@ -141,10 +167,12 @@ At preflight time the project filesystem had 141,315,076,096 bytes
 (131.61 GiB) free, passing the 50-GiB safety rule. At 540,000 rows, 2,568
 features, and four bytes per feature, the expected vectorized feature file is
 5,546,880,000 bytes (5.17 GiB). Extracted JSONL and temporary-workspace sizes
-remain unknown. These are compatibility and capacity facts, not corrected
-experimental results. Full details are in `environment/preflight.json`.
+were still unknown at that stage. The later controlled extraction measured
+17,655,416,292 JSONL bytes. These are compatibility and capacity facts, not
+corrected experimental results. Full preflight details are in
+`environment/preflight.json`.
 
 `environment/requirements-lock.txt` is a reproducibility snapshot of this
 specific macOS arm64 environment. It is not a universal cross-platform lock
-file. Dataset and model contents remain undownloaded and independently
-unhashed, and no corrected experiment has run.
+file. Later controlled checks independently verified the downloaded dataset and
+model contents. No corrected experiment has run.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections import Counter
 from dataclasses import dataclass
 from typing import Iterable
@@ -12,6 +13,12 @@ import pandas as pd
 EXPECTED_PE_COUNTS = {"Win32": 360_000, "Win64": 120_000, "Dot_Net": 60_000}
 EXPECTED_PE_RECORDS = sum(EXPECTED_PE_COUNTS.values())
 REQUIRED_METADATA_COLUMNS = {"sha256", "label", "file_type", "family"}
+REVIEWED_SELECTION_COLUMNS = REQUIRED_METADATA_COLUMNS | {"week_id"}
+REVIEWED_UNIQUE_HASH_COUNT = 539_940
+REVIEWED_HASH_MULTIPLICITIES = {1: 539_880, 2: 60}
+REVIEWED_REPEATED_HASH_LIST_SHA256 = (
+    "81c20f8d9397f4f27143652988dfdc036edc3a3c948a0efe75e7817e97283767"
+)
 FILE_TYPE_ALIASES = {".NET": "Dot_Net", "DotNet": "Dot_Net", "dotnet": "Dot_Net"}
 
 
@@ -110,6 +117,63 @@ def validate_metadata(
     return report
 
 
+def validate_reviewed_selection_metadata(
+    metadata: pd.DataFrame,
+    expected_records: int = EXPECTED_PE_RECORDS,
+    expected_file_types: dict[str, int] = EXPECTED_PE_COUNTS,
+    expected_unique_hashes: int = REVIEWED_UNIQUE_HASH_COUNT,
+    expected_multiplicities: dict[int, int] = REVIEWED_HASH_MULTIPLICITIES,
+    expected_repeated_hash_digest: str = REVIEWED_REPEATED_HASH_LIST_SHA256,
+) -> ValidationReport:
+    """Validate the narrow, reviewed 540,000-row official PE selection."""
+    require_columns(metadata, REVIEWED_SELECTION_COLUMNS)
+    report = build_report(metadata)
+    errors: list[str] = []
+    hashes = metadata["sha256"]
+    if hashes.isna().any() or hashes.astype(str).str.strip().eq("").any():
+        errors.append("missing or blank SHA-256 hashes")
+    labels = metadata["label"]
+    if labels.isna().any() or not labels.isin([0, 1]).all():
+        errors.append("labels must contain only binary values 0 and 1")
+    if report.row_count != expected_records:
+        errors.append(f"expected {expected_records} selected PE records, found {report.row_count}")
+    actual_types = {normalize_file_type(key): value for key, value in report.file_type_counts.items()}
+    if actual_types != expected_file_types:
+        errors.append(f"expected file-type counts {expected_file_types}, found {actual_types}")
+    if report.unique_hash_count != expected_unique_hashes:
+        errors.append(
+            f"expected {expected_unique_hashes} unique selected hashes, "
+            f"found {report.unique_hash_count}"
+        )
+    if report.duplicate_multiplicities != expected_multiplicities:
+        errors.append(
+            f"expected selected hash multiplicities {expected_multiplicities}, "
+            f"found {report.duplicate_multiplicities}"
+        )
+    hash_counts = hashes.value_counts()
+    repeated_hashes = sorted(str(value) for value in hash_counts[hash_counts > 1].index)
+    repeated_digest = hashlib.sha256("\n".join(repeated_hashes).encode("utf-8")).hexdigest()
+    if repeated_digest != expected_repeated_hash_digest:
+        errors.append("selected repeated-hash list digest does not match the reviewed profile")
+    repeated = metadata[metadata["sha256"].isin(repeated_hashes)]
+    conflict_columns = ("label", "family", "file_type")
+    for column in conflict_columns:
+        conflicts = repeated.groupby("sha256", dropna=False)[column].nunique(dropna=False).gt(1).sum()
+        if conflicts:
+            errors.append(f"selected repeated hashes have {int(conflicts)} {column} conflicts")
+    cross_week = repeated.groupby("sha256", dropna=False)["week_id"].nunique(dropna=False).gt(1).sum()
+    if int(cross_week) != len(repeated_hashes):
+        errors.append(
+            "every reviewed repeated hash must cross week boundaries: "
+            f"expected {len(repeated_hashes)}, found {int(cross_week)}"
+        )
+    if report.exact_duplicate_count:
+        errors.append(f"found {report.exact_duplicate_count} exact selected metadata records")
+    if errors:
+        raise ValidationError("reviewed selection validation failed:\n- " + "\n- ".join(errors))
+    return report
+
+
 def validate_inputs(metadata: pd.DataFrame, predictions: Iterable[float]) -> ValidationReport:
     report = validate_metadata(metadata)
     validate_predictions(predictions, expected_length=len(metadata))
@@ -124,4 +188,3 @@ def filter_by_minimum_count(metadata: pd.DataFrame, column: str, minimum_count: 
     counts = metadata[column].value_counts(dropna=False)
     keep = set(counts[counts >= minimum_count].index)
     return metadata[metadata[column].isin(keep)].copy()
-

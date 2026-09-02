@@ -1,3 +1,5 @@
+import hashlib
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -8,6 +10,7 @@ from ember_calibration.data_validation import (
     filter_by_minimum_count,
     validate_metadata,
     validate_predictions,
+    validate_reviewed_selection_metadata,
 )
 
 
@@ -66,3 +69,43 @@ def test_minimum_count_filtering_keeps_only_eligible_groups():
     filtered = filter_by_minimum_count(frame, "family", 2)
     assert filtered["family"].tolist() == ["a", "a"]
 
+
+def test_reviewed_selection_validation_allows_only_expected_cross_week_repeat():
+    frame = pd.DataFrame(
+        [
+            ["repeat", 1, "Win32", "family-a", 1],
+            ["repeat", 1, "Win32", "family-a", 2],
+            ["unique", 0, "Win64", None, 3],
+        ],
+        columns=["sha256", "label", "file_type", "family", "week_id"],
+    )
+    repeated_digest = hashlib.sha256(b"repeat").hexdigest()
+    report = validate_reviewed_selection_metadata(
+        frame,
+        expected_records=3,
+        expected_file_types={"Win32": 2, "Win64": 1},
+        expected_unique_hashes=2,
+        expected_multiplicities={1: 1, 2: 1},
+        expected_repeated_hash_digest=repeated_digest,
+    )
+    assert report.unique_hash_count == 2
+
+
+def test_reviewed_selection_validation_rejects_repeat_conflict():
+    frame = pd.DataFrame(
+        [
+            ["repeat", 1, "Win32", "family-a", 1],
+            ["repeat", 0, "Win32", "family-a", 2],
+        ],
+        columns=["sha256", "label", "file_type", "family", "week_id"],
+    )
+    repeated_digest = hashlib.sha256(b"repeat").hexdigest()
+    with pytest.raises(ValidationError, match="label conflicts"):
+        validate_reviewed_selection_metadata(
+            frame,
+            expected_records=2,
+            expected_file_types={"Win32": 2},
+            expected_unique_hashes=1,
+            expected_multiplicities={2: 1},
+            expected_repeated_hash_digest=repeated_digest,
+        )

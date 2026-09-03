@@ -5,8 +5,7 @@ accuracy and calibration scores are strong, but some malware families have high
 false-negative rates.
 
 The study uses the released LightGBM model and the 2,568-feature `thrember`
-representation. It does not retrain or recalibrate the detector. This repository
-is maintained by Tara Dixit.
+representation. It does not retrain or recalibrate the detector. 
 
 [Read the paper](paper/EMBER2024_Family_Calibration.pdf)
 

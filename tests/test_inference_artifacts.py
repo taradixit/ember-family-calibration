@@ -270,20 +270,46 @@ def test_analysis_cli_loads_both_inputs_through_inference_manifest(tmp_path, mon
     prediction_path = tmp_path / "predictions.npy"
     pd.DataFrame({"label": [0]}).to_parquet(metadata_path, index=False)
     np.save(prediction_path, np.array([0.1], dtype=np.float64))
+    preparation_path = tmp_path / "preparation_manifest.json"
+    model_path = tmp_path / "model.txt"
+    preparation_path.write_text("{}")
+    model_path.write_text("model")
     observed = {}
 
     def load_manifest(path, root):
         observed["manifest"] = path
         observed["root"] = root
-        return {"metadata": metadata_path, "predictions": prediction_path}
+        return {
+            "metadata": metadata_path,
+            "predictions": prediction_path,
+            "preparation_manifest": preparation_path,
+            "model": model_path,
+        }
 
-    def capture_outputs(metadata, predictions, output_dir, threshold, bins, minimum_count):
+    def capture_outputs(
+        metadata,
+        predictions,
+        output_dir,
+        threshold,
+        bins,
+        minimum_count,
+        sensitivity_bins,
+        sensitivity_minimums,
+        provenance,
+    ):
         observed["metadata"] = metadata
         observed["predictions"] = np.asarray(predictions).copy()
         observed["output_dir"] = output_dir
+        observed["sensitivity_bins"] = sensitivity_bins
+        observed["sensitivity_minimums"] = sensitivity_minimums
 
     monkeypatch.setattr(analysis_cli, "load_inference_artifacts", load_manifest)
     monkeypatch.setattr(analysis_cli, "write_analysis_outputs", capture_outputs)
+    monkeypatch.setattr(
+        analysis_cli,
+        "repository_relative_path",
+        lambda path, root: analysis_cli.Path(path).name,
+    )
     manifest = repository_root / "results/inference/inference_manifest.json"
     output_dir = repository_root / "results/analysis"
     analysis_cli.main(
@@ -298,3 +324,5 @@ def test_analysis_cli_loads_both_inputs_through_inference_manifest(tmp_path, mon
     assert observed["metadata"]["label"].tolist() == [0]
     np.testing.assert_array_equal(observed["predictions"], [0.1])
     assert observed["output_dir"] == output_dir
+    assert observed["sensitivity_bins"] == (10, 15, 20, 30)
+    assert observed["sensitivity_minimums"] == (50, 100, 200)

@@ -1,30 +1,34 @@
 #!/usr/bin/env python3
-"""Validate reviewed inputs and write aggregate and family summaries."""
+"""Write corrected aggregate, family, sensitivity, and plotting outputs."""
 
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import json
+import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from ember_calibration.data_validation import validate_reviewed_selection_inputs  # noqa: E402
-from ember_calibration.family_analysis import family_metrics  # noqa: E402
+from ember_calibration.analysis import write_analysis_outputs  # noqa: E402
+from ember_calibration.archive_manifest import sha256_file  # noqa: E402
 from ember_calibration.inference_artifacts import load_inference_artifacts  # noqa: E402
-from ember_calibration.metrics import (  # noqa: E402
-    CALIBRATION_THRESHOLD,
-    accuracy,
-    brier_score,
-    expected_calibration_error,
-    maximum_calibration_error,
-    reliability_bins,
-    roc_auc,
-)
 from ember_calibration.selection import repository_relative_path  # noqa: E402
+
+
+def positive_integer_list(value: str) -> tuple[int, ...]:
+    try:
+        parsed = tuple(int(item) for item in value.split(","))
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("expected comma-separated positive integers") from error
+    if not parsed or len(set(parsed)) != len(parsed) or any(item < 1 for item in parsed):
+        raise argparse.ArgumentTypeError("expected unique comma-separated positive integers")
+    return parsed
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -34,39 +38,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--bins", type=int, default=15)
     parser.add_argument("--minimum-family-count", type=int, default=100)
+    parser.add_argument(
+        "--sensitivity-bins",
+        type=positive_integer_list,
+        default=(10, 15, 20, 30),
+    )
+    parser.add_argument(
+        "--sensitivity-family-minimums",
+        type=positive_integer_list,
+        default=(50, 100, 200),
+    )
     return parser.parse_args(argv)
 
 
-def write_analysis_outputs(
-    metadata: pd.DataFrame,
-    predictions: np.ndarray,
-    output_dir: Path,
-    threshold: float,
-    bins: int,
-    minimum_family_count: int,
-) -> None:
-    report = validate_reviewed_selection_inputs(metadata, predictions)
-    print(report.as_text())
-    labels = metadata["label"].to_numpy()
-    summary = {
-        "accuracy": accuracy(labels, predictions, threshold),
-        "roc_auc": roc_auc(labels, predictions),
-        "brier_score": brier_score(labels, predictions),
-        "ece": expected_calibration_error(labels, predictions, bins),
-        "mce": maximum_calibration_error(labels, predictions, bins),
-        "decision_threshold": threshold,
-        "calibration_decision_threshold": CALIBRATION_THRESHOLD,
-        "calibration_confidence_range": [0.5, 1.0],
-        "calibration_bins": bins,
-    }
-    output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "aggregate_metrics.json").write_text(json.dumps(summary, indent=2) + "\n")
-    pd.DataFrame(reliability_bins(labels, predictions, bins)).to_csv(
-        output_dir / "reliability_bins.csv", index=False
-    )
-    family_metrics(metadata, predictions, minimum_family_count, threshold, bins).to_csv(
-        output_dir / "family_metrics.csv", index=False
-    )
+def utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def current_commit(repository_root: Path) -> str:
+    return subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository_root,
+        text=True,
+    ).strip()
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -75,9 +69,37 @@ def main(argv: list[str] | None = None) -> None:
     repository_relative_path(args.inference_manifest, repository_root)
     repository_relative_path(args.output_dir, repository_root)
     inference = load_inference_artifacts(args.inference_manifest, repository_root)
+    inference_document = json.loads(args.inference_manifest.read_text(encoding="utf-8"))
     metadata = pd.read_parquet(inference["metadata"])
     predictions = np.load(inference["predictions"], mmap_mode="r", allow_pickle=False)
     try:
+        provenance = {
+            "execution_time_utc": utc_now(),
+            "implementation_commit": current_commit(repository_root),
+            "input_paths": {
+                "inference_manifest": repository_relative_path(
+                    args.inference_manifest, repository_root
+                ),
+                "predictions": repository_relative_path(inference["predictions"], repository_root),
+                "preparation_manifest": repository_relative_path(
+                    inference["preparation_manifest"], repository_root
+                ),
+                "metadata": repository_relative_path(inference["metadata"], repository_root),
+                "model": repository_relative_path(inference["model"], repository_root),
+            },
+            "input_sha256": {
+                "inference_manifest": sha256_file(args.inference_manifest),
+                "predictions": sha256_file(inference["predictions"]),
+                "preparation_manifest": sha256_file(inference["preparation_manifest"]),
+                "metadata": sha256_file(inference["metadata"]),
+                "model": sha256_file(inference["model"]),
+            },
+            "model_revision": inference_document["model"]["repository_revision"],
+            "dependency_versions": {
+                name: importlib.metadata.version(name)
+                for name in ("matplotlib", "numpy", "pandas", "scikit-learn")
+            },
+        }
         write_analysis_outputs(
             metadata,
             predictions,
@@ -85,6 +107,9 @@ def main(argv: list[str] | None = None) -> None:
             args.threshold,
             args.bins,
             args.minimum_family_count,
+            args.sensitivity_bins,
+            args.sensitivity_family_minimums,
+            provenance,
         )
     finally:
         del predictions

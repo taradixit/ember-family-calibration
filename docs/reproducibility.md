@@ -112,10 +112,12 @@ analysis will be reported after inference.
     require exact label alignment.
 12. Record metadata/features checksums, row count, feature count, and exact
    feature byte size in the preparation manifest. Inference must consume and
-   validate this manifest, compare the LightGBM model feature count, and require
-   finite predictions in `[0, 1]` with exactly the prepared row count.
-13. Run aggregate analysis, then malicious-only family analysis with the reviewed
-   minimum count. Record excluded families and all analysis parameters.
+   validate this manifest, compare the LightGBM model feature count, and write
+   finite probabilities in `[0, 1]` through bounded batches and a transactional
+   inference manifest.
+13. Load predictions and metadata through the inference-to-preparation manifest
+   chain before aggregate and malicious-only family analysis. Record excluded
+   families and all analysis parameters.
 
 ## Output provenance
 

@@ -91,12 +91,12 @@ python scripts/prepare_test_data.py \
 python scripts/run_inference.py \
   --model models/EMBER2024_PE.model \
   --preparation-manifest data/processed/preparation_manifest.json \
-  --output results/pred_probs.npy \
+  --output-dir results/inference \
+  --batch-size 10000 \
   --execute
 python scripts/analyze_results.py \
-  --metadata data/processed/test_metadata.parquet \
-  --predictions results/pred_probs.npy \
-  --output-dir results/corrected
+  --inference-manifest results/inference/inference_manifest.json \
+  --output-dir results/analysis
 ```
 
 The first command is a dry run. It prints the pinned repositories, revisions,
@@ -110,9 +110,10 @@ The selector is also a dry run unless `--execute` is present. On execution it
 rechecks every source file and paired row before writing the documented first
 half through temporary files. Preparation accepts only a complete selection
 manifest, rechecks the selected files and residual-repeat profile, and derives
-the feature count. Inference consumes the preparation manifest rather than a
-manually supplied feature count. Downloading, selection, vectorization, and
-inference remain explicit opt-in actions.
+the feature count. Inference consumes the preparation manifest and predicts in
+bounded batches. Analysis follows the inference-to-preparation manifest chain.
+Downloading, selection, vectorization, and inference remain explicit opt-in
+actions.
 
 Verified upstream pins:
 

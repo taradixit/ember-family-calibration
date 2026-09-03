@@ -14,7 +14,6 @@ from ember_calibration.preparation import (
     validate_vectorized_label_file,
 )
 from scripts.prepare_test_data import build_preparation_provenance, validate_aggregate_record_counts
-from scripts.run_inference import build_prediction_provenance
 
 
 def test_int32_vectorized_labels_are_accepted(tmp_path):
@@ -170,7 +169,7 @@ def make_provenance_files(tmp_path):
     }
 
 
-def test_preparation_and_prediction_provenance_use_explicit_relative_paths(tmp_path):
+def test_preparation_provenance_uses_explicit_relative_paths(tmp_path):
     paths = make_provenance_files(tmp_path)
     selection_document = {
         "selection_rule_name": "reviewed-rule",
@@ -217,39 +216,18 @@ def test_preparation_and_prediction_provenance_use_explicit_relative_paths(tmp_p
         },
         {"numpy": "test", "pandas": "test", "pyarrow": "test", "thrember": "0.1.0"},
     )
-    prepared = {
-        "rows": 1,
-        "feature_count": 2,
-        "features": paths["features"],
-        "metadata": paths["metadata"],
-    }
-    prediction = build_prediction_provenance(
-        paths["repository_root"],
-        paths["model"],
-        sha256_file(paths["model"]),
-        paths["preparation_manifest"],
-        prepared,
-        "test-version",
-        2,
-    )
     assert preparation["selection_manifest"]["path"] == "data/selected/selection_manifest.json"
     assert preparation["inputs"][0]["path"] == "data/selected/Win32_test/week.jsonl"
     assert preparation["artifacts"]["features"]["path_base"] == (
         "preparation_manifest_directory"
     )
-    assert prediction["model"]["path"] == "models/EMBER2024_PE.model"
-    assert prediction["features"]["path"] == "X_test.dat"
-    combined_json = json.dumps({"preparation": preparation, "prediction": prediction})
+    combined_json = json.dumps({"preparation": preparation})
     assert str(tmp_path) not in combined_json
     assert not any(
         record["path"].startswith("/")
         for record in (
             preparation["selection_manifest"],
             preparation["inputs"][0],
-            prediction["model"],
-            prediction["preparation_manifest"],
-            prediction["features"],
-            prediction["metadata"],
         )
     )
 
@@ -296,19 +274,4 @@ def test_provenance_rejects_files_outside_repository(tmp_path):
                 "overwrite": False,
             },
             {"numpy": "test", "pandas": "test", "pyarrow": "test", "thrember": "0.1.0"},
-        )
-    with pytest.raises(SelectionError, match="inside the repository"):
-        build_prediction_provenance(
-            paths["repository_root"],
-            outside,
-            sha256_file(outside),
-            paths["preparation_manifest"],
-            {
-                "rows": 1,
-                "feature_count": 2,
-                "features": paths["features"],
-                "metadata": paths["metadata"],
-            },
-            "test-version",
-            2,
         )

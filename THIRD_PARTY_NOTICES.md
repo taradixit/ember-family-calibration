@@ -1,9 +1,5 @@
 # Third-party notices
 
-This repository has no project license. The notices below apply to the external
-software, data, and model used by the study. The large external artifacts are
-not stored in Git.
-
 ## EMBER2024 and thrember
 
 EMBER2024 and the `thrember` Python package are provided by the EMBER2024

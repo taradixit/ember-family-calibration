@@ -92,7 +92,7 @@ def main() -> None:
     repository_relative_path(args.output, repository_root)
     if not args.model.is_file():
         raise FileNotFoundError(args.model)
-    prepared = load_prepared_artifacts(args.preparation_manifest)
+    prepared = load_prepared_artifacts(args.preparation_manifest, repository_root)
     model_checksum = sha256_file(args.model)
     if model_checksum != HISTORICAL_MODEL_SHA256:
         raise ValueError(f"unexpected model checksum: {model_checksum}")

@@ -221,6 +221,7 @@ def execute_inference(
                 expected_rows=rows,
                 expected_features=feature_count,
                 expected_model_sha256=model_checksum,
+                expected_publication_directory=output_dir,
             )
         else:
             manifest_validator(staged_manifest)

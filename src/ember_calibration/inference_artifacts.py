@@ -37,8 +37,15 @@ def load_inference_artifacts(
     expected_model_sha256: str = HISTORICAL_MODEL_SHA256,
     expected_model_revision: str = MODEL_REVISION,
     preparation_loader: Callable[..., dict[str, object]] = load_prepared_artifacts,
+    expected_publication_directory: Path | None = None,
 ) -> dict[str, object]:
     repository_relative_path(manifest_path, repository_root)
+    publication_directory = (
+        manifest_path.parent
+        if expected_publication_directory is None
+        else expected_publication_directory
+    )
+    repository_relative_path(publication_directory, repository_root)
     if manifest_path.name != "inference_manifest.json":
         raise ValueError("inference manifest has an unexpected filename")
     document = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -129,7 +136,7 @@ def load_inference_artifacts(
     if (
         command_arguments.get("model") != model_record.get("path")
         or command_arguments.get("preparation_manifest") != preparation_record.get("path")
-        or command_output_dir != manifest_path.parent.resolve()
+        or command_output_dir != publication_directory.resolve()
         or command_arguments.get("batch_size") != batch_size
         or command_arguments.get("execute") is not True
     ):

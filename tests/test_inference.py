@@ -9,6 +9,7 @@ import ember_calibration.inference as inference_module
 import scripts.run_inference as inference_cli
 from ember_calibration.archive_manifest import sha256_file
 from ember_calibration.inference import positive_batch_size, validate_prediction_array
+from ember_calibration.inference_artifacts import load_inference_artifacts
 
 
 class FakeModel:
@@ -81,6 +82,21 @@ def run_inference(context, model=None, batch_size=2, overwrite=False, validator=
 def operation_directories(output_dir):
     return list(output_dir.parent.glob(".inference.staging-*")) + list(
         output_dir.parent.glob(".inference.backup-*")
+    )
+
+
+def run_with_default_validator(context, model=None):
+    return inference_cli.execute_inference(
+        context["repository_root"],
+        context["model_path"],
+        context["model_checksum"],
+        context["preparation_manifest"],
+        context["prepared"],
+        context["output_dir"],
+        model or FakeModel(),
+        "test-lightgbm",
+        batch_size=2,
+        commit_identifier="0" * 40,
     )
 
 
@@ -180,6 +196,45 @@ def test_missing_feature_file_cleans_staging(tmp_path):
     context["feature_path"].unlink()
     with pytest.raises(FileNotFoundError):
         run_inference(context)
+    assert not context["output_dir"].exists()
+    assert not operation_directories(context["output_dir"])
+
+
+def test_default_validator_receives_final_publication_directory(tmp_path, monkeypatch):
+    context = make_context(tmp_path)
+    observed = {}
+
+    def validate_staged(manifest_path, repository_root, **arguments):
+        observed["manifest_parent"] = manifest_path.parent
+        observed["publication_directory"] = arguments["expected_publication_directory"]
+        return load_inference_artifacts(
+            manifest_path,
+            repository_root,
+            preparation_loader=lambda *args, **kwargs: {
+                "metadata": context["preparation_manifest"]
+            },
+            **arguments,
+        )
+
+    monkeypatch.setattr(inference_cli, "load_inference_artifacts", validate_staged)
+    manifest_path = run_with_default_validator(context)
+    assert observed["manifest_parent"].name.startswith(".inference.staging-")
+    assert observed["publication_directory"] == context["output_dir"]
+    assert manifest_path == context["output_dir"] / "inference_manifest.json"
+    assert manifest_path.is_file()
+    assert not operation_directories(context["output_dir"])
+
+
+def test_default_manifest_validation_failure_cleans_staging(tmp_path, monkeypatch):
+    context = make_context(tmp_path)
+
+    def reject_staged(manifest_path, repository_root, **arguments):
+        assert arguments["expected_publication_directory"] == context["output_dir"]
+        raise ValueError("staged manifest rejected")
+
+    monkeypatch.setattr(inference_cli, "load_inference_artifacts", reject_staged)
+    with pytest.raises(ValueError, match="staged manifest rejected"):
+        run_with_default_validator(context)
     assert not context["output_dir"].exists()
     assert not operation_directories(context["output_dir"])
 

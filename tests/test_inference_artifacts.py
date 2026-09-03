@@ -112,19 +112,24 @@ def make_manifest(tmp_path):
     }
 
 
-def load_small(context, preparation_calls=None):
+def load_small(context, preparation_calls=None, expected_publication_directory=None):
     def preparation_loader(*args, **kwargs):
         if preparation_calls is not None:
             preparation_calls.append((args, kwargs))
         return {"metadata": context["metadata"]}
 
+    arguments = {
+        "expected_rows": 3,
+        "expected_features": 2,
+        "expected_model_sha256": context["model_checksum"],
+        "preparation_loader": preparation_loader,
+    }
+    if expected_publication_directory is not None:
+        arguments["expected_publication_directory"] = expected_publication_directory
     return load_inference_artifacts(
         context["manifest"],
         context["repository_root"],
-        expected_rows=3,
-        expected_features=2,
-        expected_model_sha256=context["model_checksum"],
-        preparation_loader=preparation_loader,
+        **arguments,
     )
 
 
@@ -142,6 +147,14 @@ def refresh_prediction_record(context):
     rewrite_manifest(context)
 
 
+def move_to_staging(context):
+    staging_dir = context["repository_root"] / "results/.inference.staging-test"
+    context["manifest"].parent.replace(staging_dir)
+    context["manifest"] = staging_dir / "inference_manifest.json"
+    context["predictions"] = staging_dir / "predictions.npy"
+    return staging_dir
+
+
 def test_loader_validates_manifest_chain_and_returns_paths(tmp_path):
     context = make_manifest(tmp_path)
     preparation_calls = []
@@ -149,6 +162,44 @@ def test_loader_validates_manifest_chain_and_returns_paths(tmp_path):
     assert result["predictions"] == context["predictions"]
     assert result["metadata"] == context["metadata"]
     assert len(preparation_calls) == 1
+
+
+def test_loader_validates_staged_manifest_for_explicit_publication_directory(tmp_path):
+    context = make_manifest(tmp_path)
+    staging_dir = move_to_staging(context)
+    publication_directory = context["repository_root"] / "results/inference"
+    result = load_small(
+        context,
+        expected_publication_directory=publication_directory,
+    )
+    assert result["predictions"] == staging_dir / "predictions.npy"
+
+
+def test_loader_rejects_staged_manifest_without_publication_context(tmp_path):
+    context = make_manifest(tmp_path)
+    move_to_staging(context)
+    with pytest.raises(ValueError, match="command arguments"):
+        load_small(context)
+
+
+def test_loader_rejects_wrong_staged_publication_directory(tmp_path):
+    context = make_manifest(tmp_path)
+    move_to_staging(context)
+    with pytest.raises(ValueError, match="command arguments"):
+        load_small(
+            context,
+            expected_publication_directory=context["repository_root"] / "results/other",
+        )
+
+
+def test_loader_rejects_publication_directory_outside_repository(tmp_path):
+    context = make_manifest(tmp_path)
+    move_to_staging(context)
+    with pytest.raises(ValueError, match="inside the repository"):
+        load_small(
+            context,
+            expected_publication_directory=tmp_path / "outside",
+        )
 
 
 def test_loader_rejects_prediction_checksum_mismatch(tmp_path):

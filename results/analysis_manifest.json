@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "completion_status": "complete",
+  "execution_time_utc": "2026-09-03T04:58:29Z",
+  "implementation_commit": "c63e5548d6c1eab93e57b99e292d1af68fa31318",
+  "input_paths": {
+    "inference_manifest": "results/inference/inference_manifest.json",
+    "predictions": "results/inference/predictions.npy",
+    "preparation_manifest": "data/processed/preparation_manifest.json",
+    "metadata": "data/processed/test_metadata.parquet",
+    "model": "models/EMBER2024_PE.model"
+  },
+  "input_sha256": {
+    "inference_manifest": "064cd6da66d2c30bf160d5b827b5b49545e58e882b4e80d13490cac5c4bae175",
+    "predictions": "d01c1acd4857228c92d4027b40707b13821317e3bc39137a5dd9aa22bff3df3b",
+    "preparation_manifest": "b7a3d77fdf5650e556b7eedeedf4c58e7ac3883cebd1f3deb3af1fe0c6429a3b",
+    "metadata": "dc78b14234a4a5be63875d7d0c29feee85a6aa0d2e86a33241fc3605e10a5c71",
+    "model": "4252027863492ac138785c8c18576f43dad77d00faddc14e8c0072e8db419f99"
+  },
+  "model_revision": "e5b945dd90e1a1a1ec0cc07b3a17b52e9ba2d0c2",
+  "dependency_versions": {
+    "matplotlib": "3.11.1",
+    "numpy": "2.5.2",
+    "pandas": "3.0.5",
+    "scikit-learn": "1.9.0"
+  },
+  "row_count": 540000,
+  "prediction_shape": [
+    540000
+  ],
+  "prediction_dtype": "float64",
+  "decision_threshold": 0.5,
+  "calibration_definition": "predicted class p >= 0.5; predicted-label confidence max(p, 1-p); equal-width [0.5, 1.0] bins; left-closed/right-open except final includes 1.0",
+  "primary_bin_count": 15,
+  "sensitivity_bin_counts": [
+    10,
+    15,
+    20,
+    30
+  ],
+  "primary_family_minimum": 100,
+  "sensitivity_family_minimums": [
+    50,
+    100,
+    200
+  ],
+  "family_exclusion_counts": {
+    "malicious_rows": 270000,
+    "unusable_family_rows": 37633,
+    "usable_family_rows": 232367,
+    "below_minimum_family_count": 3554,
+    "below_minimum_rows": 33513,
+    "eligible_family_count": 232,
+    "eligible_malicious_rows": 198854
+  },
+  "output_filenames": [
+    "aggregate_metrics.json",
+    "reliability_bins.csv",
+    "family_metrics.csv",
+    "calibration_bin_sensitivity.csv",
+    "family_minimum_sensitivity.csv",
+    "reliability_diagram.png",
+    "family_failures.png",
+    "analysis_manifest.json"
+  ],
+  "outputs": {
+    "aggregate_metrics.json": {
+      "size_bytes": 326,
+      "sha256": "d4c9c414f1ea6599c9db11397ce299daf2ec7dbb7678e45e66c243225d51b25a"
+    },
+    "reliability_bins.csv": {
+      "size_bytes": 1467,
+      "sha256": "99508f137d226b78075039899b64ba979cd29280b7ba86cb0b6ef2d33a24815a"
+    },
+    "family_metrics.csv": {
+      "size_bytes": 14215,
+      "sha256": "6b50f98665c67a8de4ba513b67eead53e59295cf994ddc33fce2291dc1b25f0f"
+    },
+    "calibration_bin_sensitivity.csv": {
+      "size_bytes": 632,
+      "sha256": "ff2a93164d780e330af0a48423569e874a8466f97a446be8946e574c5b531063"
+    },
+    "family_minimum_sensitivity.csv": {
+      "size_bytes": 605,
+      "sha256": "b2f823e0eb35b82ddfa19bdba1acbd1496573fb287296604ea4c8a728d3608ee"
+    },
+    "reliability_diagram.png": {
+      "size_bytes": 90109,
+      "sha256": "39054758302d5bfdf2ef41c01619fb2a3514f166208c6effd8ee9799d9ed01b6"
+    },
+    "family_failures.png": {
+      "size_bytes": 99461,
+      "sha256": "51c911848056812844da4c2dc983ef047460765602fac2f9f071669536b056c0"
+    }
+  }
+}

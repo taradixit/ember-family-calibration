@@ -13,6 +13,14 @@ models/
 artifacts/
 results/*
 !results/README.md
+!results/aggregate_metrics.json
+!results/reliability_bins.csv
+!results/family_metrics.csv
+!results/calibration_bin_sensitivity.csv
+!results/family_minimum_sensitivity.csv
+!results/reliability_diagram.png
+!results/family_failures.png
+!results/analysis_manifest.json
 *.dat
 *.jsonl
 *.model

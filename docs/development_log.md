@@ -47,3 +47,17 @@
 - Added synthetic tests for missing files, size and checksum mismatches,
   download staging, manifest fields, and extraction ordering. No external file
   was downloaded or opened while developing these checks.
+
+## 2026-09-03 — corrected inference and analysis
+
+- Ran the released EMBER2024 PE model once on the reviewed 540,000-row,
+  2,568-feature preparation in 54 bounded batches.
+- Independently validated the 540,000 finite `float64` probabilities, manifest
+  chain, input hashes, output hash, ordering, and range.
+- Added aggregate, malicious-only family, bin-count sensitivity, and family-
+  minimum sensitivity analysis with two source-linked figures.
+- Independently recalculated every aggregate scalar, reliability bin, family
+  row, exclusion count, sensitivity value, and top-family overlap with NumPy,
+  pandas, and scikit-learn.
+- Kept corrected SHAP, retraining, calibration fitting, and bootstrap confidence
+  intervals out of scope.

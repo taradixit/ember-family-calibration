@@ -1,0 +1,4 @@
+minimum_malicious_family_count,eligible_family_count,eligible_malicious_row_count,primary_top_10_false_negative_rate_overlap_count,primary_top_10_false_negative_rate_overlap_families,primary_top_10_ece_overlap_count,primary_top_10_ece_overlap_families
+50,394,210067,6,goblin;lazzzy;malicord;penguish;rugmi;softcnapp,6,goblin;lazzzy;malicord;penguish;rugmi;softcnapp
+100,232,198854,10,babar;bodegun;goblin;lazzzy;malicord;midie;nemesis;penguish;rugmi;softcnapp,10,avrora;goblin;hidmar;innobundle;lazzzy;malicord;nemesis;penguish;rugmi;softcnapp
+200,128,184149,3,babar;midie;rugmi,3,hidmar;innobundle;rugmi

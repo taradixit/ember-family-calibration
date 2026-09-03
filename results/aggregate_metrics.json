@@ -1,0 +1,14 @@
+{
+  "accuracy": 0.9803222222222222,
+  "roc_auc": 0.9981880554115227,
+  "brier_score": 0.014794996524820954,
+  "ece": 0.0030850838393534975,
+  "mce": 0.027724606994260825,
+  "decision_threshold": 0.5,
+  "calibration_decision_threshold": 0.5,
+  "calibration_confidence_range": [
+    0.5,
+    1.0
+  ],
+  "calibration_bins": 15
+}

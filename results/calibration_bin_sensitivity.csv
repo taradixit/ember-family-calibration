@@ -1,0 +1,5 @@
+bin_count,aggregate_ece,aggregate_mce,primary_top_10_family_ece_overlap_count,primary_top_10_family_ece_overlap_families
+10,0.002967792940088808,0.02337397742426406,10,avrora;goblin;hidmar;innobundle;lazzzy;malicord;nemesis;penguish;rugmi;softcnapp
+15,0.0030850838393534975,0.027724606994260825,10,avrora;goblin;hidmar;innobundle;lazzzy;malicord;nemesis;penguish;rugmi;softcnapp
+20,0.0031779906171969,0.0295410589438182,10,avrora;goblin;hidmar;innobundle;lazzzy;malicord;nemesis;penguish;rugmi;softcnapp
+30,0.003227550205594804,0.03500451143013461,10,avrora;goblin;hidmar;innobundle;lazzzy;malicord;nemesis;penguish;rugmi;softcnapp

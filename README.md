@@ -7,11 +7,12 @@ malware-family calibration in the released EMBER2024 PE detector.
 false negatives for specific malware families in the released EMBER2024 PE
 detector?
 
-An earlier analysis reported strong aggregate performance and calibration for
-the released EMBER2024 PE LightGBM detector: accuracy 0.980322, ROC AUC
-0.998188, Brier score 0.014795, 15-bin ECE 0.003085, and MCE 0.027725. These are
-historical reproduced values, not corrected final results. Project lineage and
-current scope are documented in `docs/project_context.md`.
+The corrected 540,000-row evaluation finds strong aggregate performance and
+calibration for the released EMBER2024 PE LightGBM detector: accuracy 0.980322,
+ROC AUC 0.998188, Brier score 0.014795, 15-bin ECE 0.003085, and MCE 0.027725.
+These values coincide with preliminary outputs from the invalid doubled
+pipeline, but the corrected results use the reviewed preparation and manifest
+chain. Project lineage is documented in `docs/project_context.md`.
 
 Data validation found why the released archives contain 1,080,000 rows. Each of
 the 36 weekly JSONL members contains two ordered halves. Corresponding rows have
@@ -23,17 +24,18 @@ The reviewed selection takes the first documented half of each weekly member.
 This is a deterministic structural choice, not a claim that the first half is
 higher quality. It produces the documented 540,000 rows: 360,000 Win32, 120,000
 Win64, and 60,000 Dot_Net. The selection keeps 60 hashes that repeat across
-weeks without label, family, file-type, or detector-input conflicts. A separate
-unique-hash sensitivity analysis will be reported after inference.
+weeks without label, family, file-type, or detector-input conflicts.
 
 The audit also found that the historical SHAP analysis used EMBER2018 malicious
 samples and a separately trained Random Forest, so it did not explain the
 released EMBER2024 LightGBM detector.
 
-The corrected 540,000-record experiment has **not** been rerun. This repository
-currently provides only the validation, metrics, script interfaces, tests, and
-provenance conventions needed for a future clean run. It does not train a new
-detector, include large artifacts, or make corrected empirical claims.
+Strong aggregate calibration hides substantial family-specific failures. Among
+families with at least 100 malicious records, `malicord` has an 85.19% false-
+negative rate (n=162), `lazzzy` 62.01% (n=179), and `rugmi` 61.72% (n=256).
+See [`docs/results.md`](docs/results.md) for independently verified tables,
+sensitivity results, figures, and limitations. The repository is maintained by
+Tara Dixit and does not train a new detector or distribute large artifacts.
 
 ## Repository layout
 
@@ -41,7 +43,7 @@ detector, include large artifacts, or make corrected empirical claims.
 - `scripts/`: explicit, command-line-driven workflow stages
 - `tests/`: synthetic tests that require no EMBER data
 - `docs/`: project history and reproducibility protocol
-- `results/`: documentation only until a corrected run is completed
+- `results/`: reviewed small result tables, figures, and analysis manifest
 
 ## Local setup
 
@@ -61,8 +63,8 @@ python -m pip install -r requirements.txt
 PYTHONPATH=src python -m pytest
 ```
 
-No corrected empirical experiment has run. Environment and artifact checks do
-not produce corrected results.
+The tracked results were produced from the reviewed inference manifest. Large
+inputs and predictions remain ignored and are not distributed.
 
 ## Controlled workflow
 
@@ -96,7 +98,12 @@ python scripts/run_inference.py \
   --execute
 python scripts/analyze_results.py \
   --inference-manifest results/inference/inference_manifest.json \
-  --output-dir results/analysis
+  --output-dir results/analysis \
+  --threshold 0.5 \
+  --bins 15 \
+  --minimum-family-count 100 \
+  --sensitivity-bins 10,15,20,30 \
+  --sensitivity-family-minimums 50,100,200
 ```
 
 The first command is a dry run. It prints the pinned repositories, revisions,
@@ -111,9 +118,9 @@ rechecks every source file and paired row before writing the documented first
 half through temporary files. Preparation accepts only a complete selection
 manifest, rechecks the selected files and residual-repeat profile, and derives
 the feature count. Inference consumes the preparation manifest and predicts in
-bounded batches. Analysis follows the inference-to-preparation manifest chain.
-Downloading, selection, vectorization, and inference remain explicit opt-in
-actions.
+bounded batches. Analysis follows the inference-to-preparation manifest chain
+and records the implementation commit and output checksums. Every execution
+stage remains an explicit opt-in action.
 
 Verified upstream pins:
 

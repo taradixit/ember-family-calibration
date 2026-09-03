@@ -82,8 +82,8 @@ The selected data has 539,940 unique hashes. Of these, 539,880 occur once and
 family, file-type, or detector-input conflicts. The SHA-256 of the sorted
 repeated-hash list is
 `81c20f8d9397f4f27143652988dfdc036edc3a3c948a0efe75e7817e97283767`.
-The primary analysis keeps these rows. A separate unique-hash sensitivity
-analysis will be reported after inference.
+The primary analysis keeps these rows. A unique-hash sensitivity analysis was
+not part of the corrected run and remains a limitation.
 
 ## Validation checkpoints
 
@@ -141,7 +141,8 @@ is a false negative and family false-negative rate equals `1 - accuracy`.
 Unusable family names are removed and review output is ordered by false-negative
 rate descending, ECE descending, then family name.
 
-No corrected experiment has been run.
+The corrected analysis was run once from its recorded implementation commit;
+the reviewed small outputs and their checksums are tracked in `results/`.
 
 ## 2026-08-29 clean-environment preflight
 
@@ -177,4 +178,4 @@ corrected experimental results. Full preflight details are in
 `environment/requirements-lock.txt` is a reproducibility snapshot of this
 specific macOS arm64 environment. It is not a universal cross-platform lock
 file. Later controlled checks independently verified the downloaded dataset and
-model contents. No corrected experiment has run.
+model contents. At that preflight stage, no corrected experiment had run.
